@@ -124,16 +124,16 @@
             <div
                 class="absolute top-4 left-1/2 -translate-x-1/2 z-40 pointer-events-none select-none flex flex-col items-center">
                 <div
-                    class="bg-white/90 backdrop-blur-md shadow-lg border-y-2 border-primary-100/50 px-8 py-3 rounded-full flex items-center gap-3">
+                    class="bg-white/90 backdrop-blur-md shadow-sm border border-primary-200/50 px-6 py-2 rounded-full flex items-center gap-2">
                     <!-- Optional decorative icon -->
-                    <span class="text-2xl">📜</span>
+                    <span class="text-lg opacity-80">📜</span>
 
                     <h1
-                        class="font-serif text-xl md:text-2xl text-[#C41E3A] font-bold uppercase tracking-widest whitespace-nowrap">
+                        class="font-serif text-base md:text-lg text-[#C41E3A] font-bold uppercase tracking-widest whitespace-nowrap">
                         {{ $filters['treeTitle'] ?? 'Gia phả dòng họ Nguyễn' }}
                     </h1>
 
-                    <span class="text-2xl transform scale-x-[-1]">📜</span>
+                    <span class="text-lg transform scale-x-[-1] opacity-80">📜</span>
                 </div>
             </div>
 
