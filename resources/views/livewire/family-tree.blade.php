@@ -120,35 +120,20 @@
 
             <!-- Title Header (Top Center) -->
             <!-- Title Header (Top Center) -->
-            <div class="absolute top-4 left-0 w-full z-40 pointer-events-none select-none flex flex-col items-center">
-                <style>
-                    @keyframes marquee-lr {
-                        0% {
-                            left: 0;
-                            transform: translateX(-100%);
-                        }
+            <!-- Title Header (Compact & Floating) -->
+            <div
+                class="absolute top-4 left-1/2 -translate-x-1/2 z-40 pointer-events-none select-none flex flex-col items-center">
+                <div
+                    class="bg-white/90 backdrop-blur-md shadow-lg border-y-2 border-primary-100/50 px-8 py-3 rounded-full flex items-center gap-3">
+                    <!-- Optional decorative icon -->
+                    <span class="text-2xl">📜</span>
 
-                        100% {
-                            left: 100%;
-                            transform: translateX(0);
-                        }
-                    }
-
-                    .animate-marquee-lr {
-                        animation: marquee-lr 15s linear infinite;
-                        white-space: nowrap;
-                        position: absolute;
-                        top: 0;
-                    }
-                </style>
-                <div class="w-[90vw] md:w-[800px] h-10 relative overflow-hidden mb-4">
                     <h1
-                        class="font-serif text-3xl text-[#C41E3A] font-bold uppercase tracking-widest shadow-sm drop-shadow-md animate-marquee-lr">
+                        class="font-serif text-xl md:text-2xl text-[#C41E3A] font-bold uppercase tracking-widest whitespace-nowrap">
                         {{ $filters['treeTitle'] ?? 'Gia phả dòng họ Nguyễn' }}
                     </h1>
-                </div>
-                <div class="relative flex items-center justify-center">
-                    <img src="/images/background.png" alt="Gia phả" class="w-[900px] h-[300px] object-contain" />
+
+                    <span class="text-2xl transform scale-x-[-1]">📜</span>
                 </div>
             </div>
 
