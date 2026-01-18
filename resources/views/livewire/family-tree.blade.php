@@ -18,7 +18,7 @@
         
         handleTouchStart(e) {
             if (e.touches.length === 1) {
-                this.panning = true;
+                this.panning = false; // Start as not panning
                 this.touchStartX = e.touches[0].clientX;
                 this.touchStartY = e.touches[0].clientY;
                 this.startX = this.touchStartX - this.pointX;
@@ -27,11 +27,19 @@
         },
         
         handleTouchMove(e) {
-            if (!this.panning) return;
-            e.preventDefault();
+            if (e.touches.length !== 1) return;
+            
             const touch = e.touches[0];
-            this.pointX = touch.clientX - this.startX;
-            this.pointY = touch.clientY - this.startY;
+            const deltaX = Math.abs(touch.clientX - this.touchStartX);
+            const deltaY = Math.abs(touch.clientY - this.touchStartY);
+            
+            // Only start panning if moved more than 10px (prevents accidental panning on tap)
+            if (deltaX > 10 || deltaY > 10) {
+                this.panning = true;
+                e.preventDefault(); // Only prevent default when actually panning
+                this.pointX = touch.clientX - this.startX;
+                this.pointY = touch.clientY - this.startY;
+            }
         },
         
         handleTouchEnd(e) {
@@ -89,9 +97,9 @@
         
         {{-- Tree Canvas --}}
         <div class="w-full h-full relative overflow-hidden bg-gray-50"
-             @touchstart="handleTouchStart($event)"
+             @touchstart.passive="handleTouchStart($event)"
              @touchmove="handleTouchMove($event)"
-             @touchend="handleTouchEnd($event)">
+             @touchend.passive="handleTouchEnd($event)">
              
             {{-- Tree Content with Transform --}}
             <div class="absolute origin-top-left transition-transform duration-75 ease-out will-change-transform"
