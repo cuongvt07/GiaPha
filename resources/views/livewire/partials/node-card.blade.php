@@ -14,10 +14,9 @@
         }
     }
 
-    // COMPACT HIERARCHICAL STYLING
     // Generation 1 (Thủy Tổ): Most Sacred - HORIZONTAL
     if ($generationLevel == 1) {
-        $cardWidth = 'w-56';
+        $cardWidth = 'min-w-[16rem] w-auto max-w-sm'; // Allow grow
         $cardPadding = 'p-3';
         $avatarSize = 'w-16 h-16';
         $avatarIcon = 'h-8 w-8';
@@ -30,13 +29,13 @@
         $topBorderColor = 'border-t-[6px] border-t-red-700';
         $ringClass = 'ring-4 ring-yellow-400 ring-offset-2 ring-offset-red-800';
         $decorativeClass = 'ancestor-card';
-        $nameClass = 'font-bold text-red-900 tracking-wide';
-        $yearClass = 'font-semibold text-red-800';
+        $nameClass = 'font-bold text-red-900 tracking-wide text-center';
+        $yearClass = 'font-semibold text-red-800 text-center';
         $layoutHorizontal = true;
     }
     // Generation 2: High Prestige - HORIZONTAL
     elseif ($generationLevel == 2) {
-        $cardWidth = 'w-48';
+        $cardWidth = 'min-w-[14rem] w-auto max-w-xs';
         $cardPadding = 'p-2.5';
         $avatarSize = 'w-14 h-14';
         $avatarIcon = 'h-7 w-7';
@@ -49,13 +48,13 @@
         $topBorderColor = 'border-t-4 border-t-yellow-600';
         $ringClass = 'ring-2 ring-yellow-300';
         $decorativeClass = '';
-        $nameClass = 'font-bold text-yellow-900';
-        $yearClass = 'font-semibold text-yellow-800';
+        $nameClass = 'font-bold text-yellow-900 text-center';
+        $yearClass = 'font-semibold text-yellow-800 text-center';
         $layoutHorizontal = true;
     }
     // Generation 3: Respected - Horizontal
     elseif ($generationLevel == 3) {
-        $cardWidth = 'w-44';
+        $cardWidth = 'min-w-[12rem] w-auto max-w-xs';
         $cardPadding = 'p-2';
         $avatarSize = 'w-12 h-12';
         $avatarIcon = 'h-6 w-6';
@@ -68,8 +67,8 @@
         $topBorderColor = 'border-t-[3px] border-t-amber-500';
         $ringClass = 'ring-1 ring-amber-200';
         $decorativeClass = '';
-        $nameClass = 'font-bold text-amber-900';
-        $yearClass = 'font-medium text-amber-700';
+        $nameClass = 'font-bold text-amber-900 text-center';
+        $yearClass = 'font-medium text-amber-700 text-center';
         $layoutHorizontal = true;
         $layoutVerticalText = false;
     }
@@ -175,7 +174,7 @@
 
                 <!-- Info -->
                 <div class="flex-1 min-w-0 flex flex-col justify-center">
-                    <h3 class="{{ $nameClass }} {{ $nameSize }} truncate leading-tight"
+                    <h3 class="{{ $nameClass }} {{ $nameSize }} whitespace-nowrap leading-tight"
                         style="text-shadow: 0 1px 2px rgba(255,255,255,0.8);">
                         {{ $person->name }}
                     </h3>

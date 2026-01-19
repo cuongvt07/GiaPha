@@ -79,7 +79,24 @@ class SidebarRight extends Component
         $this->results = [];
     }
 
-    // ... rules ...
+    // Validation Rules
+    protected function rules()
+    {
+        return [
+            'name' => 'required|string|max:255',
+            'gender' => 'required|in:male,female',
+            'birth_year' => 'nullable|integer|min:1000|max:' . (date('Y') + 1),
+            'death_year' => 'nullable|integer|min:1000|max:' . (date('Y') + 1),
+            'is_alive' => 'boolean',
+            'order' => 'nullable|integer|min:1',
+            'avatar' => 'nullable|image|max:2048',
+            'nickname' => 'nullable|string|max:255',
+            'place_of_birth' => 'nullable|string|max:255',
+            'hometown' => 'nullable|string|max:255',
+            'occupation' => 'nullable|string|max:255',
+            'family_branch_id' => 'nullable|exists:family_branches,id',
+        ];
+    }
 
     public function loadPerson($id)
     {
@@ -288,32 +305,29 @@ class SidebarRight extends Component
                 } else {
                     $newPerson->mother_id = $parent->id;
                 }
-                $newPerson->generation = $parent->generation + 1;
             } elseif ($this->relationship_type === 'spouse') {
-                // Create Marriage Record
-                $marriage = new \App\Models\Marriage();
-                if ($parent->gender === 'male') {
-                    $marriage->husband_id = $parent->id;
-                    $marriage->wife_id = $newPerson->id;
-                } else {
-                    $marriage->husband_id = $newPerson->id;
-                    $marriage->wife_id = $parent->id;
-                }
-                
-                $marriage->marriage_type = $this->marriage_type_input;
-                $marriage->save();
-
-                // Legacy fallback (optional, but keep for simplicity if needed anywhere)
+                // Legacy fallback
                 $newPerson->spouse_id = $parent->id;
-                
-                $newPerson->generation = $parent->generation;
             }
-        } else {
-            // Creating Root Person
-            $newPerson->generation = 1;
         }
         
+        // Save the person FIRST so we have an ID
         $newPerson->save();
+        
+        // NOW create Marriage record (after newPerson has an ID)
+        if ($parent && $this->relationship_type === 'spouse') {
+            $marriage = new \App\Models\Marriage();
+            if ($parent->gender === 'male') {
+                $marriage->husband_id = $parent->id;
+                $marriage->wife_id = $newPerson->id;
+            } else {
+                $marriage->husband_id = $newPerson->id;
+                $marriage->wife_id = $parent->id;
+            }
+            
+            $marriage->marriage_type = $this->marriage_type_input;
+            $marriage->save();
+        }
         
         // Save extra fields immediately if set
         if ($this->nickname || $this->place_of_birth || $this->hometown || $this->occupation || $this->family_branch_id) {

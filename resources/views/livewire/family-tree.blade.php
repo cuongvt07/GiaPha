@@ -173,10 +173,12 @@
     </div>
 
     {{-- DESKTOP: Horizontal Tree with Pan/Zoom --}}
+    {{-- Load D3.js --}}
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    
     <script>
         document.addEventListener('alpine:init', () => {
             Alpine.data('familyTreeLogic', () => ({
-                jsPlumbInstance: null,
                 scale: 0.5,
                 panning: false,
                 startX: 0,
@@ -189,128 +191,158 @@
                 debugStatus: 'Init',
                 retryCount: 0,
                 checkInterval: null,
+                svgLayer: null,
 
                 init() {
-                    console.log('Alpine Init');
-                    this.waitForJsPlumb();
+                    console.log('Alpine Init - D3.js Mode');
+                    this.waitForD3();
                 },
 
-                waitForJsPlumb() {
-                    if (typeof jsPlumb !== 'undefined') {
-                        this.initJsPlumb();
+                waitForD3() {
+                    if (typeof d3 !== 'undefined') {
+                        this.initD3Connections();
                     } else {
-                        console.log('Waiting for jsPlumb...');
-                        setTimeout(() => this.waitForJsPlumb(), 100);
+                        console.log('Waiting for D3.js...');
+                        setTimeout(() => this.waitForD3(), 100);
                     }
                 },
 
-                initJsPlumb() {
-                    jsPlumb.ready(() => {
-                        console.log('jsPlumb Ready');
-                        this.jsPlumbInstance = jsPlumb.getInstance({
-                            Container: 'tree-content',
-                            Connector: ['Flowchart', {
-                                stub: [20, 20],
-                                gap: 5,
-                                cornerRadius: 5,
-                                alwaysRespectStubs: true
-                            }],
-                            Endpoint: ['Blank', {}],
-                            Anchor: ['Bottom', 'Top'],
-                            PaintStyle: {
-                                stroke: '#9ca3af',
-                                strokeWidth: 2,
-                                dashstyle: '4 2'
-                            },
-                            HoverPaintStyle: {
-                                stroke: '#60a5fa',
-                                strokeWidth: 3
-                            }
-                        });
+                initD3Connections() {
+                    console.log('D3.js Ready');
+                    this.debugStatus = 'D3 Ready';
+                    
+                    // Initial draw after DOM is ready
+                    setTimeout(() => {
+                        this.drawElbowConnections();
+                        this.centerRoot();
+                    }, 500);
 
-                        this.debugStatus = 'Instance Ready';
-                        // Initial draw
-                        setTimeout(() => {
-                            this.drawConnections();
-                            this.centerRoot();
-                        }, 500);
+                    // Polling safety net
+                    this.checkInterval = setInterval(() => {
+                        const nodes = document.querySelectorAll('#tree-content [data-parent-id]').length;
+                        const svg = document.getElementById('connection-layer');
+                        const conns = svg ? svg.querySelectorAll('path').length : 0;
 
-                        // Polling safety net
-                        this.checkInterval = setInterval(() => {
-                            const nodes = document.querySelectorAll(
-                                '#tree-content [data-parent-id]').length;
-                            const conns = this.jsPlumbInstance ? this.jsPlumbInstance
-                                .getConnections().length : 0;
+                        this.debugNodeCount = nodes;
+                        this.debugConnCount = conns;
+                        this.debugStatus = 'Polling...';
 
-                            this.debugNodeCount = nodes;
-                            this.debugConnCount = conns;
-                            this.debugStatus = 'Polling...';
+                        if (nodes > 0 && conns === 0 && this.retryCount < 5) {
+                            console.warn('Nodes found but no connections. Retrying...');
+                            this.drawElbowConnections();
+                            this.retryCount++;
+                        }
+                    }, 2000);
 
-                            if (nodes > 0 && conns === 0 && this.retryCount < 5) {
-                                console.warn(
-                                    'Nodes found but no connections. Retrying...');
-                                this.drawConnections();
-                                this.retryCount++;
-                            }
-                        }, 2000);
-
-                        // Hook into Livewire updates
-                        Livewire.hook('message.processed', (message, component) => {
-                            console.log('Livewire processed. Resetting retry count.');
-                            this.retryCount = 0;
-                            setTimeout(() => this.drawConnections(), 200);
-                            setTimeout(() => this.drawConnections(), 1000);
-                        });
-
-                        // Expose global for manual trigger
-                        window.forceRedraw = () => this.drawConnections();
+                    // Hook into Livewire updates
+                    Livewire.hook('message.processed', (message, component) => {
+                        console.log('Livewire processed. Redrawing connections.');
+                        this.retryCount = 0;
+                        setTimeout(() => this.drawElbowConnections(), 200);
+                        setTimeout(() => this.drawElbowConnections(), 1000);
                     });
+
+                    // Redraw on window resize
+                    window.addEventListener('resize', () => {
+                        this.drawElbowConnections();
+                    });
+
+                    // Expose global for manual trigger
+                    window.forceRedraw = () => this.drawElbowConnections();
                 },
 
-                drawConnections() {
-                    if (!this.jsPlumbInstance) return;
+                drawElbowConnections() {
+                    const container = document.getElementById('tree-content');
+                    if (!container) return;
 
-                    try {
-                        this.jsPlumbInstance.deleteEveryConnection();
+                    // Remove existing SVG layer
+                    let svg = document.getElementById('connection-layer');
+                    if (svg) svg.remove();
 
-                        const nodes = document.querySelectorAll('#tree-content [data-parent-id]');
-                        this.debugNodeCount = nodes.length;
-                        console.log('Pool: ' + nodes.length + ' nodes');
-
-                        let count = 0;
-                        nodes.forEach(node => {
-                            const parentId = node.getAttribute('data-parent-id');
-                            const source = document.getElementById(parentId);
-
-                            if (source && node) {
-                                try {
-                                    this.jsPlumbInstance.connect({
-                                        source: source,
-                                        target: node,
-                                        overlays: [
-                                            ['Arrow', {
-                                                location: 1,
-                                                width: 8,
-                                                length: 8,
-                                                foldback: 0.8
-                                            }]
-                                        ]
-                                    });
-                                    count++;
-                                } catch (e) {
-                                    console.error('Connection failed:', e);
-                                }
-                            }
-                        });
-
-                        this.debugConnCount = count;
-                        this.debugStatus = 'Drawn ' + count;
-                        console.log('Drawn ' + count + ' connections');
-
-                        this.jsPlumbInstance.repaintEverything();
-                    } catch (err) {
-                        console.error('Fatal draw error:', err);
+                    // Get all nodes with parent relationships
+                    const nodes = document.querySelectorAll('#tree-content [data-parent-id]');
+                    this.debugNodeCount = nodes.length;
+                    
+                    if (nodes.length === 0) {
+                        this.debugStatus = 'No nodes';
+                        return;
                     }
+
+                    // Helper function to get element position relative to container using offsets
+                    // This is NOT affected by CSS transforms, so it works correctly with zoom
+                    const getOffsetPosition = (el) => {
+                        let x = 0, y = 0;
+                        let current = el;
+                        while (current && current !== container) {
+                            x += current.offsetLeft;
+                            y += current.offsetTop;
+                            current = current.offsetParent;
+                        }
+                        return { x, y, width: el.offsetWidth, height: el.offsetHeight };
+                    };
+
+                    // Calculate the bounding box of all nodes
+                    let maxX = 0, maxY = 0;
+                    const allNodes = document.querySelectorAll('#tree-content [id^="node-"]');
+                    allNodes.forEach(node => {
+                        const pos = getOffsetPosition(node);
+                        maxX = Math.max(maxX, pos.x + pos.width);
+                        maxY = Math.max(maxY, pos.y + pos.height);
+                    });
+
+                    // Create SVG layer
+                    svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    svg.id = 'connection-layer';
+                    svg.style.position = 'absolute';
+                    svg.style.top = '0';
+                    svg.style.left = '0';
+                    svg.style.width = (maxX + 200) + 'px';
+                    svg.style.height = (maxY + 200) + 'px';
+                    svg.style.pointerEvents = 'none';
+                    svg.style.overflow = 'visible';
+                    svg.style.zIndex = '5';
+                    
+                    container.insertBefore(svg, container.firstChild);
+
+                    let connectionCount = 0;
+
+                    // Draw connections using offset-based positions
+                    nodes.forEach(node => {
+                        const parentId = node.getAttribute('data-parent-id');
+                        const parent = document.getElementById(parentId);
+
+                        if (parent && node) {
+                            const parentPos = getOffsetPosition(parent);
+                            const nodePos = getOffsetPosition(node);
+
+                            // Source: center-bottom of parent
+                            const sourceX = parentPos.x + parentPos.width / 2;
+                            const sourceY = parentPos.y + parentPos.height;
+                            
+                            // Target: center-top of child
+                            const targetX = nodePos.x + nodePos.width / 2;
+                            const targetY = nodePos.y;
+
+                            // Calculate midpoint for the horizontal line (30% from parent)
+                            const midY = sourceY + (targetY - sourceY) * 0.3;
+
+                            // Create Elbow path: Vertical → Horizontal → Vertical
+                            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                            path.setAttribute('d', `M${sourceX},${sourceY} V${midY} H${targetX} V${targetY}`);
+                            path.setAttribute('fill', 'none');
+                            path.setAttribute('stroke', '#6b7280');
+                            path.setAttribute('stroke-width', '2');
+                            path.setAttribute('stroke-linecap', 'round');
+                            path.setAttribute('stroke-linejoin', 'round');
+
+                            svg.appendChild(path);
+                            connectionCount++;
+                        }
+                    });
+
+                    this.debugConnCount = connectionCount;
+                    this.debugStatus = 'D3 Drawn ' + connectionCount;
+                    console.log('D3 Elbow: Drawn ' + connectionCount + ' connections');
                 },
 
                 setPanning(e) {
@@ -350,20 +382,21 @@
                         this.pointX = e.clientX - xs * this.scale;
                         this.pointY = e.clientY - ys * this.scale;
 
-                        if (this.jsPlumbInstance) this.jsPlumbInstance.setZoom(this.scale);
+                        // Redraw connections after zoom
+                        this.drawElbowConnections();
                     }
                 },
                 resetView() {
                     this.scale = 0.5;
                     this.pointX = window.innerWidth / 2;
                     this.pointY = 100;
-                    if (this.jsPlumbInstance) this.jsPlumbInstance.setZoom(this.scale);
+                    this.drawElbowConnections();
                 },
                 centerView() {
                     this.scale = 0.5;
                     this.pointX = window.innerWidth / 2;
                     this.pointY = 200;
-                    if (this.jsPlumbInstance) this.jsPlumbInstance.setZoom(this.scale);
+                    this.drawElbowConnections();
                 },
 
                 centerOnNode(nodeId) {
@@ -396,7 +429,8 @@
                     // Let's put it at 150px from top (similar to root).
                     this.pointY = 150 - (nodeY * this.scale);
 
-                    this.jsPlumbInstance.repaintEverything();
+                    // Redraw connections after panning
+                    setTimeout(() => this.drawElbowConnections(), 50);
                 },
 
                 centerRoot() {
@@ -415,7 +449,7 @@
                 },
 
                 exportTree() {
-                    alert('Tính năng xuất ảnh đang cập nhật cho jsPlumb.');
+                    alert('Tính năng xuất ảnh đang được cập nhật.');
                 }
             }));
         });
@@ -558,7 +592,7 @@
                 :style="`transform: translate(${pointX}px, ${pointY}px) scale(${scale});`">
 
                 @if ($rootPerson)
-                    <div class="flex flex-col items-center">
+                    <div class="flex flex-col items-center pt-48">
                         <!-- Root Node -->
                         @include('livewire.partials.node-card', [
                             'person' => $rootPerson,

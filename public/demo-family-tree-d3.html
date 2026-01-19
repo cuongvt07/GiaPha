@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demo Cây Gia Phả - D3.js</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: auto;
+        }
+        
+        #tree-container {
+            display: flex;
+            justify-content: center;
+            min-height: 600px;
+        }
+        
+        /* Node styling */
+        .node rect {
+            fill: linear-gradient(180deg, #ffffff, #f8f9fa);
+            stroke: #dee2e6;
+            stroke-width: 2px;
+            rx: 12;
+            ry: 12;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));
+            transition: all 0.3s ease;
+        }
+        
+        .node:hover rect {
+            stroke: #667eea;
+            stroke-width: 3px;
+            filter: drop-shadow(0 8px 16px rgba(102,126,234,0.3));
+        }
+        
+        .node.male rect {
+            fill: url(#maleGradient);
+            stroke: #3b82f6;
+        }
+        
+        .node.female rect {
+            fill: url(#femaleGradient);
+            stroke: #ec4899;
+        }
+        
+        .node text.name {
+            font-weight: 600;
+            font-size: 14px;
+            fill: #1f2937;
+        }
+        
+        .node text.years {
+            font-size: 11px;
+            fill: #6b7280;
+        }
+        
+        .node text.gen {
+            font-size: 10px;
+            fill: #9ca3af;
+        }
+        
+        /* Link styling - Đường nối mượt mà */
+        .link {
+            fill: none;
+            stroke: #9ca3af;
+            stroke-width: 2px;
+            stroke-linecap: round;
+        }
+        
+        /* Phong cách 1: Đường cong mềm mại (Bezier) */
+        .link.curved {
+            stroke: #667eea;
+            stroke-width: 2.5px;
+            opacity: 0.7;
+        }
+        
+        /* Phong cách 2: Đường vuông góc (Elbow) */
+        .link.elbow {
+            stroke: #10b981;
+            stroke-width: 2px;
+        }
+        
+        /* Phong cách 3: Đường thẳng đứng + ngang (Step) */
+        .link.step {
+            stroke: #f59e0b;
+            stroke-width: 2px;
+        }
+        
+        .legend {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #4b5563;
+        }
+        
+        .legend-line {
+            width: 40px;
+            height: 3px;
+            border-radius: 2px;
+        }
+        
+        .style-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        
+        .style-btn {
+            padding: 10px 20px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .style-btn:hover, .style-btn.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .info-box {
+            background: #f0f9ff;
+            border-left: 4px solid #0ea5e9;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .info-box h3 {
+            color: #0369a1;
+            margin-bottom: 8px;
+        }
+        
+        .info-box p {
+            color: #0c4a6e;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <h1>🌳 Demo Cây Gia Phả với D3.js</h1>
+    
+    <div class="container">
+        <div class="info-box">
+            <h3>💡 So sánh các kiểu đường nối</h3>
+            <p>Click vào các nút bên dưới để xem các phong cách vẽ đường nối khác nhau. 
+               D3.js cho phép vẽ đường cong mượt mà (Bezier), đường vuông góc (Elbow), 
+               hoặc đường bậc thang (Step) - tất cả đều tự động tính toán để không chồng chéo.</p>
+        </div>
+        
+        <div class="style-buttons">
+            <button class="style-btn active" onclick="setLinkStyle('curved')">🌊 Curved (Mềm mại)</button>
+            <button class="style-btn" onclick="setLinkStyle('elbow')">📐 Elbow (Vuông góc)</button>
+            <button class="style-btn" onclick="setLinkStyle('step')">📊 Step (Bậc thang)</button>
+        </div>
+        
+        <div id="tree-container"></div>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-line" style="background: #3b82f6;"></div>
+                <span>Nam</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-line" style="background: #ec4899;"></div>
+                <span>Nữ</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-line" style="background: #667eea;"></div>
+                <span>Đường nối</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dữ liệu mẫu gia phả
+        const familyData = {
+            name: "Nguyễn Văn Tổ",
+            years: "1820 - 1895",
+            gender: "male",
+            gen: "Đời 1",
+            children: [
+                {
+                    name: "Nguyễn Văn Đức",
+                    years: "1845 - 1920",
+                    gender: "male",
+                    gen: "Đời 2",
+                    children: [
+                        {
+                            name: "Nguyễn Văn Thành",
+                            years: "1870 - 1945",
+                            gender: "male",
+                            gen: "Đời 3",
+                            children: [
+                                { name: "Nguyễn Văn Long", years: "1895 - 1975", gender: "male", gen: "Đời 4" },
+                                { name: "Nguyễn Thị Hồng", years: "1898 - 1980", gender: "female", gen: "Đời 4" }
+                            ]
+                        },
+                        {
+                            name: "Nguyễn Văn Hùng",
+                            years: "1873 - 1950",
+                            gender: "male",
+                            gen: "Đời 3"
+                        }
+                    ]
+                },
+                {
+                    name: "Nguyễn Văn Tài",
+                    years: "1848 - 1918",
+                    gender: "male",
+                    gen: "Đời 2",
+                    children: [
+                        {
+                            name: "Nguyễn Văn Quang",
+                            years: "1872 - 1948",
+                            gender: "male",
+                            gen: "Đời 3"
+                        },
+                        {
+                            name: "Nguyễn Văn Lâm",
+                            years: "1875 - 1952",
+                            gender: "male",
+                            gen: "Đời 3"
+                        }
+                    ]
+                },
+                {
+                    name: "Nguyễn Thị Ngọc",
+                    years: "1855 - 1930",
+                    gender: "female",
+                    gen: "Đời 2"
+                }
+            ]
+        };
+
+        // Cấu hình
+        const margin = { top: 40, right: 120, bottom: 40, left: 120 };
+        const nodeWidth = 160;
+        const nodeHeight = 70;
+        
+        let currentStyle = 'curved';
+        let svg, g, root;
+
+        // Khởi tạo
+        function init() {
+            const container = document.getElementById('tree-container');
+            const width = container.offsetWidth || 1200;
+            const height = 600;
+
+            svg = d3.select('#tree-container')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height);
+
+            // Gradient definitions
+            const defs = svg.append('defs');
+            
+            // Male gradient
+            const maleGrad = defs.append('linearGradient')
+                .attr('id', 'maleGradient')
+                .attr('x1', '0%').attr('y1', '0%')
+                .attr('x2', '0%').attr('y2', '100%');
+            maleGrad.append('stop').attr('offset', '0%').attr('stop-color', '#dbeafe');
+            maleGrad.append('stop').attr('offset', '100%').attr('stop-color', '#bfdbfe');
+            
+            // Female gradient
+            const femaleGrad = defs.append('linearGradient')
+                .attr('id', 'femaleGradient')
+                .attr('x1', '0%').attr('y1', '0%')
+                .attr('x2', '0%').attr('y2', '100%');
+            femaleGrad.append('stop').attr('offset', '0%').attr('stop-color', '#fce7f3');
+            femaleGrad.append('stop').attr('offset', '100%').attr('stop-color', '#fbcfe8');
+
+            g = svg.append('g')
+                .attr('transform', `translate(${margin.left}, ${margin.top})`);
+
+            // Tạo hierarchy
+            root = d3.hierarchy(familyData);
+            
+            // Tạo tree layout
+            const treeLayout = d3.tree()
+                .size([height - margin.top - margin.bottom, width - margin.left - margin.right - 200])
+                .separation((a, b) => (a.parent === b.parent ? 1.5 : 2));
+
+            treeLayout(root);
+
+            drawTree();
+        }
+
+        // Các hàm vẽ đường nối
+        const linkGenerators = {
+            // Đường cong Bezier mềm mại
+            curved: d3.linkHorizontal()
+                .x(d => d.y)
+                .y(d => d.x),
+            
+            // Đường vuông góc (Elbow)
+            elbow: function(d) {
+                const midY = (d.source.y + d.target.y) / 2;
+                return `M${d.source.y},${d.source.x}
+                        H${midY}
+                        V${d.target.x}
+                        H${d.target.y}`;
+            },
+            
+            // Đường bậc thang (Step)
+            step: function(d) {
+                const midY = d.source.y + 40;
+                return `M${d.source.y},${d.source.x}
+                        H${midY}
+                        V${d.target.x}
+                        H${d.target.y}`;
+            }
+        };
+
+        function drawTree() {
+            // Xóa cũ
+            g.selectAll('.link').remove();
+            g.selectAll('.node').remove();
+
+            // Vẽ đường nối
+            const links = g.selectAll('.link')
+                .data(root.links())
+                .enter()
+                .append('path')
+                .attr('class', `link ${currentStyle}`)
+                .attr('d', d => {
+                    if (currentStyle === 'curved') {
+                        return linkGenerators.curved({
+                            source: { x: d.source.x, y: d.source.y + nodeWidth/2 },
+                            target: { x: d.target.x, y: d.target.y - nodeWidth/2 }
+                        });
+                    } else {
+                        return linkGenerators[currentStyle]({
+                            source: { x: d.source.x, y: d.source.y + nodeWidth/2 },
+                            target: { x: d.target.x, y: d.target.y - nodeWidth/2 }
+                        });
+                    }
+                });
+
+            // Vẽ nodes
+            const nodes = g.selectAll('.node')
+                .data(root.descendants())
+                .enter()
+                .append('g')
+                .attr('class', d => `node ${d.data.gender}`)
+                .attr('transform', d => `translate(${d.y - nodeWidth/2}, ${d.x - nodeHeight/2})`);
+
+            // Node background
+            nodes.append('rect')
+                .attr('width', nodeWidth)
+                .attr('height', nodeHeight)
+                .attr('rx', 12)
+                .attr('ry', 12);
+
+            // Tên
+            nodes.append('text')
+                .attr('class', 'name')
+                .attr('x', nodeWidth / 2)
+                .attr('y', 25)
+                .attr('text-anchor', 'middle')
+                .text(d => d.data.name);
+
+            // Năm sinh - mất
+            nodes.append('text')
+                .attr('class', 'years')
+                .attr('x', nodeWidth / 2)
+                .attr('y', 42)
+                .attr('text-anchor', 'middle')
+                .text(d => d.data.years);
+
+            // Đời
+            nodes.append('text')
+                .attr('class', 'gen')
+                .attr('x', nodeWidth / 2)
+                .attr('y', 58)
+                .attr('text-anchor', 'middle')
+                .text(d => d.data.gen);
+        }
+
+        function setLinkStyle(style) {
+            currentStyle = style;
+            
+            // Update button states
+            document.querySelectorAll('.style-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            drawTree();
+        }
+
+        // Khởi chạy
+        init();
+    </script>
+</body>
+</html>

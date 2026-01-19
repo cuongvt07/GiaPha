@@ -7,10 +7,10 @@
 @endphp
 
 {{-- STANDARD HORIZONTAL TREE LAYOUT --}}
-<div class="flex flex-row justify-center pt-16 relative">
+<div class="flex flex-row justify-center pt-24 relative">
 
     @foreach ($children as $child)
-        <div class="flex flex-col items-center relative px-4">
+        <div class="flex flex-col items-center relative px-2">
 
             <!-- The Node Itself -->
             <div class="relative z-10 pt-2">
