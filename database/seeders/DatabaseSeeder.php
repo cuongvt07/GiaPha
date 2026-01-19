@@ -27,8 +27,7 @@ class DatabaseSeeder extends Seeder
         // - FamilyTreeSeeder: Large comprehensive family tree (100 people, 8 generations)
         
         $this->call([
-            // FamilySeeder::class,           // Comment this out if using FamilyTreeSeeder
-            FamilyTreeSeeder::class,          // Uncomment to use the larger dataset
+            FamilySeeder::class,
         ]);
     }
 }
