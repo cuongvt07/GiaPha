@@ -132,10 +132,15 @@
         </div>
 
         {{-- Tree Canvas --}}
-        <div class="w-full h-full relative overflow-hidden bg-gray-50 tree-canvas-touch"
+        <div class="w-full h-full relative overflow-hidden bg-slate-50 tree-canvas-touch"
             @touchstart.passive="handleTouchStart($event)" @touchmove="handleTouchMove($event)"
             @touchend.passive="handleTouchEnd($event)" @mousedown="handleMouseDown($event)"
             @mousemove="handleMouseMove($event)" @mouseup="handleMouseUp($event)" @mouseleave="handleMouseUp($event)">
+
+            {{-- Background Image (Traditional/Dragon Scroll) - Same as Desktop --}}
+            <div class="absolute inset-0 pointer-events-none"
+                style="background-image: url(/images/bg-dragon-scroll.jpg); background-size: cover; background-position: center; opacity: 0.5;">
+            </div>
 
             {{-- Tree Content with Transform --}}
             <div class="absolute origin-top-left transition-transform duration-75 ease-out will-change-transform"
@@ -175,7 +180,7 @@
     {{-- DESKTOP: Horizontal Tree with Pan/Zoom --}}
     {{-- Load D3.js --}}
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    
+
     <script>
         document.addEventListener('alpine:init', () => {
             Alpine.data('familyTreeLogic', () => ({
@@ -210,7 +215,7 @@
                 initD3Connections() {
                     console.log('D3.js Ready');
                     this.debugStatus = 'D3 Ready';
-                    
+
                     // Initial draw after DOM is ready
                     setTimeout(() => {
                         this.drawElbowConnections();
@@ -219,7 +224,8 @@
 
                     // Polling safety net
                     this.checkInterval = setInterval(() => {
-                        const nodes = document.querySelectorAll('#tree-content [data-parent-id]').length;
+                        const nodes = document.querySelectorAll(
+                            '#tree-content [data-parent-id]').length;
                         const svg = document.getElementById('connection-layer');
                         const conns = svg ? svg.querySelectorAll('path').length : 0;
 
@@ -262,7 +268,7 @@
                     // Get all nodes with parent relationships
                     const nodes = document.querySelectorAll('#tree-content [data-parent-id]');
                     this.debugNodeCount = nodes.length;
-                    
+
                     if (nodes.length === 0) {
                         this.debugStatus = 'No nodes';
                         return;
@@ -271,18 +277,25 @@
                     // Helper function to get element position relative to container using offsets
                     // This is NOT affected by CSS transforms, so it works correctly with zoom
                     const getOffsetPosition = (el) => {
-                        let x = 0, y = 0;
+                        let x = 0,
+                            y = 0;
                         let current = el;
                         while (current && current !== container) {
                             x += current.offsetLeft;
                             y += current.offsetTop;
                             current = current.offsetParent;
                         }
-                        return { x, y, width: el.offsetWidth, height: el.offsetHeight };
+                        return {
+                            x,
+                            y,
+                            width: el.offsetWidth,
+                            height: el.offsetHeight
+                        };
                     };
 
                     // Calculate the bounding box of all nodes
-                    let maxX = 0, maxY = 0;
+                    let maxX = 0,
+                        maxY = 0;
                     const allNodes = document.querySelectorAll('#tree-content [id^="node-"]');
                     allNodes.forEach(node => {
                         const pos = getOffsetPosition(node);
@@ -301,7 +314,7 @@
                     svg.style.pointerEvents = 'none';
                     svg.style.overflow = 'visible';
                     svg.style.zIndex = '5';
-                    
+
                     container.insertBefore(svg, container.firstChild);
 
                     let connectionCount = 0;
@@ -318,17 +331,19 @@
                             // Source: center-bottom of parent
                             const sourceX = parentPos.x + parentPos.width / 2;
                             const sourceY = parentPos.y + parentPos.height;
-                            
+
                             // Target: center-top of child
                             const targetX = nodePos.x + nodePos.width / 2;
                             const targetY = nodePos.y;
 
-                            // Calculate midpoint for the horizontal line (30% from parent)
-                            const midY = sourceY + (targetY - sourceY) * 0.3;
+                            // Calculate midpoint for the horizontal line (15% from parent)
+                            const midY = sourceY + (targetY - sourceY) * 0.15;
 
                             // Create Elbow path: Vertical → Horizontal → Vertical
-                            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                            path.setAttribute('d', `M${sourceX},${sourceY} V${midY} H${targetX} V${targetY}`);
+                            const path = document.createElementNS('http://www.w3.org/2000/svg',
+                                'path');
+                            path.setAttribute('d',
+                                `M${sourceX},${sourceY} V${midY} H${targetX} V${targetY}`);
                             path.setAttribute('fill', 'none');
                             path.setAttribute('stroke', '#6b7280');
                             path.setAttribute('stroke-width', '2');

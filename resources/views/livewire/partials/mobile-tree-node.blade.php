@@ -247,7 +247,7 @@
         {{-- Children Branch --}}
         @if ($person->children && $person->children->count() > 0)
             {{-- Vertical Connection Line Down --}}
-            <div class="w-0.5 h-10 bg-gray-400 mt-1"></div>
+            <div class="w-0.5 h-6 bg-gray-400 mt-1"></div>
 
             {{-- Children Container --}}
             <div class="flex flex-col items-center">
@@ -265,7 +265,7 @@
                         <div class="flex flex-col items-center">
                             @if ($person->children->count() > 1)
                                 {{-- Vertical line from horizontal bar to child --}}
-                                <div class="w-0.5 h-10 bg-gray-400"></div>
+                                <div class="w-0.5 h-6 bg-gray-400"></div>
                             @endif
 
                             {{-- Recursive child node --}}

@@ -2,7 +2,9 @@
 <div class="flex flex-col">
     {{-- Header --}}
     <div class="flex items-center justify-between p-4 border-b border-gray-200">
-        <h2 class="text-lg font-bold text-gray-900">Thêm thành viên mới</h2>
+        <h2 class="text-lg font-bold text-gray-900">
+            {{ $editingPersonId ? 'Chỉnh sửa thông tin' : 'Thêm thành viên mới' }}
+        </h2>
         <button wire:click="closeAddModal" class="p-2 hover:bg-gray-100 rounded-full">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor">
@@ -55,7 +57,7 @@
         {{-- Submit --}}
         <div class="pt-4">
             <button type="submit" class="w-full py-3 bg-red-600 text-white font-bold rounded-lg active:bg-red-700">
-                Thêm thành viên
+                {{ $editingPersonId ? 'Lưu thay đổi' : 'Thêm thành viên' }}
             </button>
         </div>
     </form>
