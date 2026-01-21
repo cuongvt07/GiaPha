@@ -59,7 +59,7 @@
                     placeholder="Nhập họ và tên">
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Giới tính *</label>
                     <select wire:model="newPersonGender"
@@ -76,7 +76,7 @@
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Tên tự / Biệt danh</label>
                     <input type="text" wire:model="newPersonNickname"
@@ -99,7 +99,7 @@
         {{-- Location Info --}}
         <div class="space-y-4">
             <h3 class="text-sm font-bold text-gray-900 border-b pb-1">Địa chỉ & Quê quán</h3>
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Quê quán</label>
                     <input type="text" wire:model="newPersonHometown"
@@ -121,7 +121,7 @@
         {{-- Contact Info --}}
         <div class="space-y-4">
             <h3 class="text-sm font-bold text-gray-900 border-b pb-1">Liên hệ</h3>
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Điện thoại</label>
                     <input type="tel" wire:model="newPersonPhone"
@@ -148,7 +148,7 @@
 
             @if (!$newPersonIsAlive)
                 <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-4 animate-fade-in-down">
-                    <div class="grid grid-cols-2 gap-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Năm mất</label>
                             <input type="number" wire:model="newPersonDeathYear"

@@ -1,7 +1,7 @@
 <div class="h-full w-full flex flex-col relative bg-gray-50">
     {{-- Header --}}
     <header
-        class="flex-shrink-0 h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 z-20 shadow-sm">
+        class="flex-shrink-0 h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 z-40 shadow-sm relative">
         {{-- Menu Button --}}
         <button wire:click="toggleMenu" class="p-2 -ml-2 rounded-lg hover:bg-gray-100 active:bg-gray-200">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-700" fill="none" viewBox="0 0 24 24"
@@ -23,265 +23,19 @@
         </button>
     </header>
 
-    {{-- Custom Styles for Line Animation --}}
-    <style>
-        @keyframes pulse-slow {
+    {{-- ... (styles omitted) ... --}}
 
-            0%,
-            100% {
-                opacity: 1;
-                border-color: rgba(156, 163, 175, 1);
-            }
-
-            /* gray-400 */
-            50% {
-                opacity: 0.6;
-                border-color: rgba(96, 165, 250, 1);
-            }
-
-            /* blue-400 */
-        }
-
-        .animate-pulse-slow {
-            animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
-    </style>
-
-    {{-- Tree Canvas --}}
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsPlumb/2.15.6/js/jsplumb.min.js"></script>
-    <script>
-        document.addEventListener('alpine:init', () => {
-            Alpine.data('mobileFamilyTreeLogic', () => ({
-                jsPlumbInstance: null,
-                scale: 0.7,
-                pointX: 0,
-                pointY: 60,
-                startX: 0,
-                startY: 0,
-                touchStartX: 0,
-                touchStartY: 0,
-                isPanning: false,
-
-                init() {
-                    this.pointX = 0;
-                    this.pointY = 60;
-                    this.initJsPlumb();
-                },
-
-                initJsPlumb() {
-                    jsPlumb.ready(() => {
-                        this.drawConnections();
-                        this.centerRoot();
-                    });
-                },
-
-                createInstance() {
-                    return jsPlumb.getInstance({
-                        Container: "mobile-tree-content",
-                        Connector: ["Flowchart", {
-                            stub: [20, 20],
-                            cornerRadius: 5,
-                            gap: 5,
-                            alwaysRespectStubs: true
-                        }],
-                        Endpoint: ["Blank", {}],
-                        Anchor: ["Bottom", "Top"],
-                        PaintStyle: {
-                            stroke: "#9ca3af",
-                            strokeWidth: 2,
-                            dashstyle: "4 2"
-                        },
-                        HoverPaintStyle: {
-                            stroke: "#60a5fa",
-                            strokeWidth: 3
-                        }
-                    });
-                },
-
-                drawConnections() {
-                    if (this.jsPlumbInstance) {
-                        try {
-                            this.jsPlumbInstance.reset();
-                        } catch (e) {
-                            console.warn('Error resetting jsPlumb:', e);
-                        }
-                    }
-
-                    this.jsPlumbInstance = this.createInstance();
-
-                    const nodes = document.querySelectorAll('#mobile-tree-content [data-parent-id]');
-                    nodes.forEach(node => {
-                        const parentId = node.getAttribute('data-parent-id');
-                        const source = document.getElementById(parentId);
-                        if (source && node) {
-                            try {
-                                this.jsPlumbInstance.connect({
-                                    source: source,
-                                    target: node,
-                                    anchors: ["Bottom", "Top"],
-                                    overlays: [
-                                        ["Arrow", {
-                                            location: 1,
-                                            width: 8,
-                                            length: 8,
-                                            foldback: 0.8
-                                        }]
-                                    ]
-                                });
-                            } catch (e) {
-                                console.error('Connection failed:', e);
-                            }
-                        }
-                    });
-
-                    setTimeout(() => {
-                        if (this.jsPlumbInstance) this.jsPlumbInstance.repaintEverything();
-                    }, 50);
-                },
-
-                pinchStartDist: 0,
-                startScale: 1,
-
-                handleTouchStart(e) {
-                    if (e.touches.length === 1) {
-                        // Single finger pan
-                        this.touchStartX = e.touches[0].clientX;
-                        this.touchStartY = e.touches[0].clientY;
-                        this.startX = this.touchStartX - this.pointX;
-                        this.startY = this.touchStartY - this.pointY;
-                        this.isPanning = false;
-                    } else if (e.touches.length === 2) {
-                        // Two finger pinch
-                        this.isPanning = false;
-                        this.pinchStartDist = this.getDist(e.touches);
-                        this.startScale = this.scale;
-                    }
-                },
-
-                handleTouchMove(e) {
-                    // Prevent default to stop browser scrolling/zooming
-                    if (e.cancelable) e.preventDefault();
-
-                    if (e.touches.length === 1) {
-                        // Panning
-                        const touch = e.touches[0];
-                        const deltaX = Math.abs(touch.clientX - this.touchStartX);
-                        const deltaY = Math.abs(touch.clientY - this.touchStartY);
-
-                        // Threshold to start panning
-                        if (!this.isPanning && (deltaX > 5 || deltaY > 5)) {
-                            this.isPanning = true;
-                        }
-
-                        if (this.isPanning) {
-                            this.pointX = touch.clientX - this.startX;
-                            this.pointY = touch.clientY - this.startY;
-                        }
-                    } else if (e.touches.length === 2) {
-                        // Zooming
-                        const dist = this.getDist(e.touches);
-                        // Prevent accidental tiny jitters
-                        if (Math.abs(dist - this.pinchStartDist) > 10) {
-                            const ratio = dist / this.pinchStartDist;
-                            let newScale = this.startScale * ratio;
-                            // Clamp scale
-                            newScale = Math.min(Math.max(newScale, 0.3), 3.0);
-
-                            this.scale = newScale;
-                            if (this.jsPlumbInstance) this.jsPlumbInstance.setZoom(this.scale);
-                        }
-                    }
-                },
-
-                handleTouchEnd(e) {
-                    this.isPanning = false;
-                    // Reset pinch state if fingers lift
-                    if (e.touches.length < 2) {
-                        this.pinchStartDist = 0;
-                    }
-                },
-
-                getDist(touches) {
-                    return Math.hypot(
-                        touches[0].clientX - touches[1].clientX,
-                        touches[0].clientY - touches[1].clientY
-                    );
-                },
-
-                zoomIn() {
-                    this.scale = Math.min(this.scale * 1.2, 2);
-                    if (this.jsPlumbInstance) this.jsPlumbInstance.setZoom(this.scale);
-                },
-
-                zoomOut() {
-                    this.scale = Math.max(this.scale / 1.2, 0.3);
-                    if (this.jsPlumbInstance) this.jsPlumbInstance.setZoom(this.scale);
-                },
-
-                resetView() {
-                    this.scale = 0.7;
-                    this.pointX = 0;
-                    this.pointY = 60;
-                    if (this.jsPlumbInstance) this.jsPlumbInstance.setZoom(this.scale);
-                },
-
-                centerOnNode(nodeId) {
-                    const el = document.getElementById(nodeId);
-                    if (!el) return;
-
-                    let target = el;
-                    let nodeX = 0;
-                    let nodeY = 0;
-
-                    while (target && target.id !== 'mobile-tree-content') {
-                        nodeX += target.offsetLeft;
-                        nodeY += target.offsetTop;
-                        target = target.offsetParent;
-                    }
-
-                    nodeX += el.offsetWidth / 2;
-                    nodeY += el.offsetHeight / 2;
-
-                    const screenW = window.innerWidth;
-                    this.pointX = (screenW / 2) - (nodeX * this.scale);
-                    this.pointY = 150 - (nodeY * this.scale);
-
-                    if (this.jsPlumbInstance) this.jsPlumbInstance.repaintEverything();
-                },
-
-                centerRoot() {
-                    setTimeout(() => {
-                        const root = document.querySelector(
-                            '#mobile-tree-content [id^="node-"]:not([data-parent-id])');
-                        if (root) {
-                            this.centerOnNode(root.id);
-                        }
-                    }, 500);
-                },
-
-                handleTreeUpdate(focusNodeId) {
-                    setTimeout(() => {
-                        this.drawConnections();
-                        if (focusNodeId) {
-                            this.centerOnNode(focusNodeId);
-                        } else {
-                            this.centerRoot();
-                        }
-                    }, 100);
-                }
-            }));
-        });
-    </script>
-
-    <div class="h-full w-full flex-1 overflow-hidden relative" x-data="mobileFamilyTreeLogic"
+    {{-- Tree Canvas Container --}}
+    <div class="h-full w-full flex-1 overflow-hidden relative bg-gray-50/50" x-data="mobileFamilyTreeLogic"
         @touchstart.passive="handleTouchStart($event)" @touchmove="handleTouchMove($event)"
         @touchend.passive="handleTouchEnd($event)" @center-on-node.window="centerOnNode($event.detail.nodeId)"
         @tree-updated.window="handleTreeUpdate($event.detail.focusNodeId)" style="touch-action: none;">
 
-        {{-- Tree Content - Centered horizontally --}}
+        {{-- Tree Content --}}
         <div id="mobile-tree-content" wire:ignore
             wire:key="tree-canvas-{{ $rootPerson ? $rootPerson->id : 'empty' }}-{{ $treeVersion }}"
-            class="absolute inset-x-0 flex justify-center transition-transform duration-75 ease-out"
+            class="absolute inset-x-0 flex justify-center ease-out will-change-transform"
+            :class="isPanning ? '' : 'transition-transform duration-200'"
             :style="`transform: translateX(${pointX}px) translateY(${pointY}px) scale(${scale}); transform-origin: top center;`">
             @if ($rootPerson)
                 @include('livewire.partials.mobile-node', [
@@ -350,9 +104,9 @@
 
     {{-- Add Modal --}}
     @if ($showAddModal)
-        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
             <div class="absolute inset-0 bg-black/50" wire:click="closeAddModal"></div>
-            <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] overflow-y-auto">
+            <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
                 @include('livewire.partials.mobile-add-form')
             </div>
         </div>
