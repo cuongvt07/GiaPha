@@ -290,6 +290,7 @@ class MobileFamilyTree extends Component
         $this->loadRootPerson();
         $this->treeVersion++;
         $this->dispatch('tree-updated', focusNodeId: 'node-' . $person->id);
+        $this->dispatch('notify-success', 'Đã lưu thông tin thành công!');
     }
 
     public function deletePerson($personId)
@@ -306,6 +307,9 @@ class MobileFamilyTree extends Component
                  $this->treeVersion++;
                  $this->dispatch('tree-updated');
             }
+            $this->dispatch('notify-success', 'Đã xóa thành viên.');
+        } else {
+             $this->dispatch('notify-error', 'Không tìm thấy thành viên để xóa.');
         }
     }
 

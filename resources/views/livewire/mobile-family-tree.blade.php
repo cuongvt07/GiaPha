@@ -58,11 +58,13 @@
                 pointY: 60,
                 startX: 0,
                 startY: 0,
+                // Touch handling
                 touchStartX: 0,
                 touchStartY: 0,
+                lastDist: 0,
                 isPanning: false,
-                pinchStartDist: 0,
-                startScale: 1,
+                isZooming: false,
+                rafId: null,
 
                 init() {
                     this.pointX = 0;
@@ -140,53 +142,59 @@
 
                 handleTouchStart(e) {
                     if (e.touches.length === 1) {
+                        this.isPanning = true;
+                        this.isZooming = false;
                         this.touchStartX = e.touches[0].clientX;
                         this.touchStartY = e.touches[0].clientY;
-                        this.startX = this.touchStartX - this.pointX;
-                        this.startY = this.touchStartY - this.pointY;
-                        this.isPanning = false;
+                        this.startX = this.pointX;
+                        this.startY = this.pointY;
                     } else if (e.touches.length === 2) {
                         this.isPanning = false;
-                        this.pinchStartDist = this.getDist(e.touches);
-                        this.startScale = this.scale;
+                        this.isZooming = true;
+                        this.lastDist = this.getDist(e.touches);
                     }
                 },
 
                 handleTouchMove(e) {
-                    if (e.cancelable) e.preventDefault();
-                    if (e.touches.length === 1) {
-                        const touch = e.touches[0];
-                        const deltaX = Math.abs(touch.clientX - this.touchStartX);
-                        const deltaY = Math.abs(touch.clientY - this.touchStartY);
-                        if (!this.isPanning && (deltaX > 5 || deltaY > 5)) {
-                            this.isPanning = true;
-                        }
-                        if (this.isPanning) {
-                            this.pointX = touch.clientX - this.startX;
-                            this.pointY = touch.clientY - this.startY;
-                        }
-                    } else if (e.touches.length === 2) {
-                        const dist = this.getDist(e.touches);
-                        if (Math.abs(dist - this.pinchStartDist) > 10) {
-                            const ratio = dist / this.pinchStartDist;
-                            let newScale = this.startScale * ratio;
-                            newScale = Math.min(Math.max(newScale, 0.3), 3.0);
-                            this.scale = newScale;
-                            if (this.jsPlumbInstance) this.jsPlumbInstance.setZoom(this.scale);
-                        }
+                    if (e.cancelable && (this.isPanning || this.isZooming)) {
+                        e.preventDefault();
                     }
+
+                    if (this.rafId) cancelAnimationFrame(this.rafId);
+
+                    this.rafId = requestAnimationFrame(() => {
+                        if (e.touches.length === 1 && this.isPanning) {
+                            const dx = e.touches[0].clientX - this.touchStartX;
+                            const dy = e.touches[0].clientY - this.touchStartY;
+                            this.pointX = this.startX + dx;
+                            this.pointY = this.startY + dy;
+                        } else if (e.touches.length === 2 && this.isZooming) {
+                            const dist = this.getDist(e.touches);
+                            if (dist > 0 && this.lastDist > 0) {
+                                const ratio = dist / this.lastDist;
+                                const newScale = Math.min(Math.max(this.scale * ratio, 0.3),
+                                    3.0);
+                                this.scale = newScale;
+                                this.lastDist = dist;
+                                if (this.jsPlumbInstance) this.jsPlumbInstance.setZoom(this
+                                    .scale);
+                            }
+                        }
+                    });
                 },
 
                 handleTouchEnd(e) {
-                    this.isPanning = false;
-                    if (e.touches.length < 2) {
-                        this.pinchStartDist = 0;
+                    if (e.touches.length === 0) {
+                        this.isPanning = false;
+                        this.isZooming = false;
                     }
                 },
 
                 getDist(touches) {
-                    return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY -
-                        touches[1].clientY);
+                    return Math.hypot(
+                        touches[0].clientX - touches[1].clientX,
+                        touches[0].clientY - touches[1].clientY
+                    );
                 },
 
                 zoomIn() {
@@ -207,19 +215,26 @@
                 centerOnNode(nodeId) {
                     const el = document.getElementById(nodeId);
                     if (!el) return;
-                    let target = el,
-                        nodeX = 0,
-                        nodeY = 0;
-                    while (target && target.id !== 'mobile-tree-content') {
-                        nodeX += target.offsetLeft;
-                        nodeY += target.offsetTop;
-                        target = target.offsetParent;
+
+                    // Logic to find absolute position in the tree content
+                    let nodeX = el.offsetLeft + el.offsetWidth / 2;
+                    let nodeY = el.offsetTop + el.offsetHeight / 2;
+                    let parent = el.offsetParent;
+
+                    while (parent && parent.id !== 'mobile-tree-content') {
+                        nodeX += parent.offsetLeft;
+                        nodeY += parent.offsetTop;
+                        parent = parent.offsetParent;
                     }
-                    nodeX += el.offsetWidth / 2;
-                    nodeY += el.offsetHeight / 2;
+
                     const screenW = window.innerWidth;
+                    const screenH = window.innerHeight;
+
+                    // Calculate target translation to center the node
+                    // CenterX = ScreenW/2 - NodeX * Scale
                     this.pointX = (screenW / 2) - (nodeX * this.scale);
-                    this.pointY = 150 - (nodeY * this.scale);
+                    this.pointY = (screenH / 3) - (nodeY * this.scale); // Position slightly upper half
+
                     if (this.jsPlumbInstance) this.jsPlumbInstance.repaintEverything();
                 },
 
@@ -265,11 +280,16 @@
                     'generationLevel' => 1,
                 ])
             @else
-                <div class="text-center p-8">
-                    <p class="text-gray-500">Chưa có dữ liệu</p>
-                    <button wire:click="openAddModal" class="mt-4 px-6 py-2 bg-blue-500 text-white rounded-full">
-                        Thêm người đầu tiên
+                <div class="absolute inset-0 flex flex-col items-center justify-center">
+                    <button wire:click="openAddModal"
+                        class="w-24 h-24 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full shadow-xl flex items-center justify-center transform transition-all duration-300 hover:scale-110 active:scale-95 ring-4 ring-blue-100 hover:ring-blue-200 group">
+                        <svg xmlns="http://www.w3.org/2000/svg"
+                            class="h-12 w-12 text-white group-hover:rotate-90 transition-transform duration-300"
+                            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
                     </button>
+                    <p class="mt-6 text-gray-500 font-medium text-lg animate-pulse">Chạm để tạo Cụ Tổ</p>
                 </div>
             @endif
         </div>
@@ -316,10 +336,13 @@
 
     {{-- Unified Modal --}}
     @if ($modalMode !== 'none')
-        <div class="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4">
-            <div class="absolute inset-0 bg-black/50" wire:click="closeModal"></div>
+        <div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+            x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4"
+            x-transition:enter-end="opacity-100 translate-y-0" x-transition:leave="transition ease-in duration-200"
+            x-transition:leave-start="opacity-100 translate-y-0" x-transition:leave-end="opacity-0 translate-y-4">
+            <div class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" wire:click="closeModal"></div>
             <div
-                class="relative bg-white w-full h-full sm:h-auto sm:max-h-[90vh] sm:rounded-2xl shadow-xl overflow-hidden flex flex-col">
+                class="relative bg-white w-full h-[85vh] sm:h-auto sm:max-h-[90vh] rounded-t-3xl sm:rounded-2xl shadow-xl overflow-hidden flex flex-col transform transition-transform">
                 @include('livewire.partials.mobile-person-modal', [
                     'mode' => $modalMode,
                     'selectedPerson' => $selectedPerson,
@@ -334,7 +357,8 @@
         <div class="flex flex-col items-center p-4 bg-white/90 rounded-2xl shadow-md">
             <svg class="animate-spin h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none"
                 viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                    stroke-width="3">
                 </circle>
                 <path class="opacity-75" fill="currentColor"
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">

@@ -34,6 +34,7 @@
 
 <body class="bg-gray-100 font-sans text-gray-900 antialiased h-full w-full overflow-hidden">
     {{ $slot }}
+    <x-toast-notification />
     @livewireScripts
 </body>
 
