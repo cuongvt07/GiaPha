@@ -576,6 +576,15 @@
             <!-- Floating Controls (Bottom Right) -->
             <div class="absolute bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-auto">
                 <div class="bg-white rounded-lg shadow-lg border border-gray-200 p-1 flex flex-col">
+                    {{-- Calendar Button --}}
+                    <button wire:click="$dispatch('open-important-dates')" class="relative p-2 hover:bg-gray-100 rounded text-gray-600 border-b border-gray-100" title="Lịch sự kiện">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd" />
+                        </svg>
+                        @if($hasUpcomingEvents)
+                            <span class="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] text-white font-bold animate-shake z-10 border border-white">!</span>
+                        @endif
+                    </button>
                     <button @click="scale *= 1.1" class="p-2 hover:bg-gray-100 rounded text-gray-600"
                         title="Zoom In">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
@@ -600,6 +609,8 @@
                     </button>
                 </div>
             </div>
+
+            {{-- Important Dates Modal moved to root --}}
 
             <!-- Infinite Canvas World -->
             <div id="tree-content"
@@ -688,5 +699,8 @@
 
     {{-- Mobile Bottom Navigation --}}
     @include('components.bottom-nav')
+
+    {{-- Important Dates Modal (Root Level) --}}
+    <livewire:important-dates />
 </div>
 </div>

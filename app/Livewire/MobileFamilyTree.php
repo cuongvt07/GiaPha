@@ -23,9 +23,21 @@ class MobileFamilyTree extends Component
     public $editingPersonId = null;
 
     // Tab & Search Logic for Mobile Menu
-    public $activeTab = 'tree'; 
+    public $activeTab = 'tree';
     public $listSearch = '';
-    
+    public $hasUpcomingEvents = false; // Badge logic
+
+    protected $listeners = [
+        'focus-on-branch' => 'focusOnPerson',
+        'filters-updated' => 'updateFilters',
+        'dates-updated' => 'refreshDateStatus'
+    ];
+
+    public function refreshDateStatus()
+    {
+        $this->hasUpcomingEvents = \App\Models\ImportantDate::checkUpcoming();
+    }
+
     public function setTab($tab)
     {
         $this->activeTab = $tab;
@@ -33,6 +45,7 @@ class MobileFamilyTree extends Component
 
     public function mount()
     {
+        $this->hasUpcomingEvents = \App\Models\ImportantDate::checkUpcoming();
         $this->loadRootPerson();
     }
 
@@ -41,10 +54,10 @@ class MobileFamilyTree extends Component
         $root = Person::with([
             'father',
             'mother',
-             // Children loaded lazily via attribute
-             'marriagesAsHusband.wife',
-             'marriagesAsWife.husband',
-             'burialInfo'
+            // Children loaded lazily via attribute
+            'marriagesAsHusband.wife',
+            'marriagesAsWife.husband',
+            'burialInfo'
         ])
             ->whereNull('father_id')
             ->whereNull('mother_id')
@@ -53,7 +66,7 @@ class MobileFamilyTree extends Component
         if ($root) {
             $this->originalRootId = $root->id;
             $this->rootPerson = $root;
-             // Ensure relations accessible for blade to prevent "property of non-object" on first load
+            // Ensure relations accessible for blade to prevent "property of non-object" on first load
         }
     }
 
@@ -61,8 +74,8 @@ class MobileFamilyTree extends Component
     {
         $this->focusedPersonId = null;
         if ($this->originalRootId) {
-             // Reload to ensure fresh data
-             $this->loadRootPerson();
+            // Reload to ensure fresh data
+            $this->loadRootPerson();
         }
         $this->treeVersion++;
         $this->dispatch('tree-updated');
@@ -95,7 +108,7 @@ class MobileFamilyTree extends Component
     public $newPersonDeathDateFull;
     public $newPersonBurialPlace;
     public $newPersonBurialDate;
-    
+
     // File Uploads
     public $newPersonAvatar;
     public $newPersonGravePhoto;
@@ -122,13 +135,13 @@ class MobileFamilyTree extends Component
         $this->modalMode = $mode;
 
         if ($mode === 'view') {
-           $this->selectPerson($personId);
+            $this->selectPerson($personId);
         } elseif ($mode === 'add') {
             $this->openAddModal($personId); // Use personId as parentId
         } elseif ($mode === 'edit') {
             $this->editPerson($personId);
         }
-        
+
         $this->loading = false;
     }
 
@@ -137,7 +150,7 @@ class MobileFamilyTree extends Component
     {
         $this->dispatch('person-selected', id: $personId);
     }
-    
+
     // Add Person Setup
     public function openAddModal($parentId = null)
     {
@@ -161,8 +174,8 @@ class MobileFamilyTree extends Component
             $this->newPersonName = $person->name;
             $this->newPersonGender = $person->gender;
             $this->newPersonBirthYear = $person->birth_year;
-            $this->newPersonIsAlive = (bool)$person->is_alive;
-            
+            $this->newPersonIsAlive = (bool) $person->is_alive;
+
             // Fill extended fields
             $this->newPersonNickname = $person->nickname;
             $this->newPersonTitle = $person->title;
@@ -174,11 +187,11 @@ class MobileFamilyTree extends Component
             $this->newPersonPhone = $person->phone;
             $this->newPersonEmail = $person->email;
             $this->newPersonDeathYear = $person->death_year;
-            
+
             // Files
             $this->existingAvatarUrl = $person->avatar_url;
             $this->newPersonAvatar = null;
-            
+
             // Burial
             if ($person->burialInfo) {
                 $this->newPersonBurialPlace = $person->burialInfo->burial_place;
@@ -204,7 +217,8 @@ class MobileFamilyTree extends Component
 
         if ($this->editingPersonId) {
             $person = Person::find($this->editingPersonId);
-            if (!$person) return;
+            if (!$person)
+                return;
         } else {
             $person = new Person();
             $person->order = 1;
@@ -214,7 +228,7 @@ class MobileFamilyTree extends Component
         $person->gender = $this->newPersonGender;
         $person->birth_year = $this->newPersonBirthYear;
         $person->is_alive = $this->newPersonIsAlive;
-        
+
         // Extended fields
         $person->nickname = $this->newPersonNickname;
         $person->title = $this->newPersonTitle;
@@ -230,10 +244,10 @@ class MobileFamilyTree extends Component
             $person->date_of_death = null;
         } else {
             $person->death_year = $this->newPersonDeathYear;
-             // If full date is provided, it might override death_year logic in model, but for now specific mapping
-             // Assuming model uses death_year for display mostly
+            // If full date is provided, it might override death_year logic in model, but for now specific mapping
+            // Assuming model uses death_year for display mostly
         }
-        
+
         // Avatar Upload
         if ($this->newPersonAvatar) {
             $path = $this->newPersonAvatar->store('avatars', 'public');
@@ -253,10 +267,10 @@ class MobileFamilyTree extends Component
         }
 
         $person->save();
-        
+
         // Burial Info Saving
         if (!$this->newPersonIsAlive && ($this->newPersonBurialPlace || $this->newPersonBurialDate || $this->newPersonGravePhoto)) {
-             $burialData = [
+            $burialData = [
                 'burial_place' => $this->newPersonBurialPlace,
                 'burial_date' => $this->newPersonBurialDate,
             ];
@@ -273,12 +287,12 @@ class MobileFamilyTree extends Component
         }
 
         if ($this->editingPersonId) {
-             $this->selectedPerson = $person->fresh(); // Update selected person view if open
+            $this->selectedPerson = $person->fresh(); // Update selected person view if open
         }
 
         $this->reset(['newPersonName', 'newPersonGender', 'newPersonBirthYear', 'newPersonIsAlive']);
         $this->modalMode = 'none'; // Close modal
-        
+
         $this->loadRootPerson();
         $this->treeVersion++;
         $this->dispatch('tree-updated', focusNodeId: 'node-' . $person->id);
@@ -291,17 +305,17 @@ class MobileFamilyTree extends Component
         if ($person) {
             $person->delete();
             $this->modalMode = 'none'; // Close modal
-            
+
             if ($this->rootPerson && $this->rootPerson->id == $personId) {
                 $this->resetToRoot();
             } else {
-                 $this->loadRootPerson(); // Refresh tree
-                 $this->treeVersion++;
-                 $this->dispatch('tree-updated');
+                $this->loadRootPerson(); // Refresh tree
+                $this->treeVersion++;
+                $this->dispatch('tree-updated');
             }
             $this->dispatch('notify-success', 'Đã xóa thành viên.');
         } else {
-             $this->dispatch('notify-error', 'Không tìm thấy thành viên để xóa.');
+            $this->dispatch('notify-error', 'Không tìm thấy thành viên để xóa.');
         }
     }
 
@@ -319,7 +333,7 @@ class MobileFamilyTree extends Component
         $members = [];
 
         if ($this->activeTab === 'stats') {
-             $stats = [
+            $stats = [
                 'total_members' => \App\Models\Person::count(),
                 'living_members' => \App\Models\Person::where('is_alive', true)->count(),
                 'deceased_members' => \App\Models\Person::where('is_alive', false)->count(),
@@ -333,7 +347,7 @@ class MobileFamilyTree extends Component
             $query = \App\Models\Person::query();
             if ($this->listSearch) {
                 $query->where('name', 'like', '%' . $this->listSearch . '%')
-                      ->orWhere('nickname', 'like', '%' . $this->listSearch . '%');
+                    ->orWhere('nickname', 'like', '%' . $this->listSearch . '%');
             }
             $members = $query->orderBy('name')->simplePaginate(15);
         }

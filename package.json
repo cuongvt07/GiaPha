@@ -17,6 +17,7 @@
         "vite": "^7.0.7"
     },
     "dependencies": {
+        "@nghiavuive/lunar_date_vi": "^2.0.1",
         "jsplumb": "^2.15.6"
     }
 }

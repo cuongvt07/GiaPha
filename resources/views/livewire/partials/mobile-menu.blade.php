@@ -4,7 +4,7 @@
     <div class="flex-shrink-0 p-4 bg-[#C41E3A] text-white">
         <div class="flex items-center justify-between gap-3">
              <div class="flex-1 overflow-hidden">
-                <marquee scrollamount="4" class="font-bold font-serif text-lg tracking-wide whitespace-nowrap">
+                <marquee scrollamount="4" class="font-bold font-serif text-lg tracking-wide whitespace-nowrap uppercase">
                     {{ $filters['treeTitle'] ?? 'Gia Phả Đại Tộc' }}
                 </marquee>
             </div>
@@ -80,28 +80,7 @@
                     </div>
                 </div>
                 
-                 <h3 class="text-sm font-bold text-gray-800 uppercase tracking-wider mb-2 flex items-center gap-2 pt-2">
-                    <span class="w-1 h-4 bg-[#8B4513] rounded-full"></span>
-                    Bộ lọc thành viên
-                </h3>
-                <div class="grid grid-cols-2 gap-3">
-                    <label class="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-lg shadow-sm active:scale-95 transition-transform">
-                        <input type="checkbox" wire:model.live="filters.showAlive" class="rounded text-green-600 focus:ring-green-600 w-4 h-4 border-gray-300">
-                        <span class="text-xs font-bold text-gray-700">Còn sống</span>
-                    </label>
-                    <label class="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-lg shadow-sm active:scale-95 transition-transform">
-                        <input type="checkbox" wire:model.live="filters.showDeceased" class="rounded text-gray-500 focus:ring-gray-500 w-4 h-4 border-gray-300">
-                        <span class="text-xs font-bold text-gray-700">Đã mất</span>
-                    </label>
-                    <label class="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 rounded-lg shadow-sm active:scale-95 transition-transform">
-                        <input type="checkbox" wire:model.live="filters.showMale" class="rounded text-blue-600 focus:ring-blue-600 w-4 h-4 border-gray-300">
-                        <span class="text-xs font-bold text-gray-700">Nam</span>
-                    </label>
-                    <label class="flex items-center gap-2 p-3 bg-pink-50 border border-pink-100 rounded-lg shadow-sm active:scale-95 transition-transform">
-                        <input type="checkbox" wire:model.live="filters.showFemale" class="rounded text-pink-600 focus:ring-pink-600 w-4 h-4 border-gray-300">
-                        <span class="text-xs font-bold text-gray-700">Nữ</span>
-                    </label>
-                </div>
+
             </div>
 
         {{-- TAB: STATS --}}

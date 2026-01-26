@@ -13,7 +13,7 @@
 
         {{-- Title --}}
         <div class="flex-1 overflow-hidden mx-2">
-            <marquee scrollamount="4" class="font-bold text-gray-900 text-lg whitespace-nowrap">
+            <marquee scrollamount="4" class="font-bold text-[#C41E3A] text-lg whitespace-nowrap uppercase">
                 {{ $filters['treeTitle'] ?? 'Gia Phả Đại Tộc' }}
             </marquee>
         </div>
@@ -300,6 +300,16 @@
 
         {{-- Zoom Controls (FABs) --}}
         <div class="absolute bottom-4 right-4 flex flex-col gap-2 z-10">
+            <button wire:click="$dispatch('open-important-dates')"
+                class="relative w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center border border-gray-200 active:bg-gray-100">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                @if($hasUpcomingEvents)
+                    <span class="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] text-white font-bold animate-shake z-10 border border-white">!</span>
+                @endif
+            </button>
             <button @click="zoomIn()"
                 class="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center border border-gray-200 active:bg-gray-100">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-700" fill="none" viewBox="0 0 24 24"
@@ -357,4 +367,7 @@
             <p class="mt-1.5 text-xs text-gray-400">Đang tải...</p>
         </div>
     </div>
+    
+    {{-- Important Dates Modal (Root Level) --}}
+    <livewire:important-dates />
 </div>
