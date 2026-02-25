@@ -476,8 +476,107 @@
                     }, 100);
                 },
 
-                // Print Preview State
+                init() {
+                    this.centerRoot();
+                    window.addEventListener('resize', () => {
+                        if (this.printPreviewActive) this.updateSheetPreview();
+                    });
+                },
+                PAPER_SIZES: {
+                    'a4': { name: 'A4 (210x297mm)', w: 210, h: 297 },
+                    'a3': { name: 'A3 (297x420mm)', w: 297, h: 420 },
+                    'a2': { name: 'A2 (420x594mm)', w: 420, h: 594 },
+                    'a1': { name: 'A1 (594x841mm)', w: 594, h: 841 },
+                    'a0': { name: 'A0 (841x1189mm)', w: 841, h: 1189 },
+                    'auto': { name: 'Tự động (Vừa khít)', w: 0, h: 0 }
+                },
+                selectedPaperSize: 'auto',
+                paperOrientation: 'landscape', // 'landscape' or 'portrait'
+                exportQuality: 2, // 1=Normal, 2=High, 3=Ultra
+                printTab: 'tree', // 'tree' or 'calendar'
                 printPreviewActive: false,
+
+                // Added for visual preview frame
+                sheetW: 0,
+                sheetH: 0,
+                sheetScale: 1,
+
+                mmToPx(mm) {
+                    return Math.round(mm * 96 / 25.4);
+                },
+
+                async imageToBase64(url) {
+                    try {
+                        const response = await fetch(url);
+                        const blob = await response.blob();
+                        return new Promise((resolve, reject) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve(reader.result);
+                            reader.onerror = reject;
+                            reader.readAsDataURL(blob);
+                        });
+                    } catch (e) {
+                        console.warn('Image fetch failed:', url, e);
+                        return url;
+                    }
+                },
+
+                getTitleFontSize() {
+                    if (this.selectedPaperSize === 'auto') return 'text-3xl';
+                    
+                    const mapping = {
+                        'a4': 'text-3xl',      // ~30px
+                        'a3': 'text-4xl',      // ~36px
+                        'a2': 'text-5xl',      // ~48px
+                        'a1': 'text-6xl',      // ~60px
+                        'a0': 'text-8xl'       // ~96px
+                    };
+                    return mapping[this.selectedPaperSize] || 'text-3xl';
+                },
+
+                getTitleTopMargin() {
+                    if (this.selectedPaperSize === 'auto') return 40;
+                    const mapping = {
+                        'a4': 30,
+                        'a3': 40,
+                        'a2': 40,
+                        'a1': 50,
+                        'a0': 50
+                    };
+                    return mapping[this.selectedPaperSize] || 40;
+                },
+
+                // Refresh the visual frame dimensions to fit the screen
+                updateSheetPreview() {
+                    this.$nextTick(() => {
+                        const canvasArea = document.getElementById('print-canvas-area');
+                        if (!canvasArea || canvasArea.offsetWidth === 0) return;
+
+                        const availW = canvasArea.offsetWidth - 100;
+                        const availH = canvasArea.offsetHeight - 100;
+
+                        if (this.selectedPaperSize === 'auto') {
+                            this.sheetW = availW; 
+                            this.sheetH = availH;
+                            this.sheetScale = 1;
+                        } else {
+                            const size = this.PAPER_SIZES[this.selectedPaperSize];
+                            let baseW, baseH;
+                            if (this.paperOrientation === 'landscape') {
+                                baseW = this.mmToPx(size.h);
+                                baseH = this.mmToPx(size.w);
+                            } else {
+                                baseW = this.mmToPx(size.w);
+                                baseH = this.mmToPx(size.h);
+                            }
+                            this.sheetW = baseW;
+                            this.sheetH = baseH;
+                            // Calculate scale to fit in viewport
+                            this.sheetScale = Math.min(availW / baseW, availH / baseH);
+                        }
+                    });
+                },
+
                 printDragEnabled: true,
                 printDragging: false,
                 printDragNodeId: null,
@@ -502,6 +601,7 @@
                     this.printPanX = 0;
                     this.printPanY = 0;
                     this.printScale = 0.45;
+                    this.printTab = 'tree';
                     document.body.classList.add('print-preview-mode');
                     document.body.style.overflow = 'hidden';
 
@@ -526,9 +626,7 @@
                     target.innerHTML = source.innerHTML;
 
                     // Remove action buttons, hover effects, and unnecessary UI from clones
-                    target.querySelectorAll('.center-node-btn, .opacity-0.group-hover\\:opacity-100').forEach(el => el.remove());
-                    // Remove any absolutely positioned UI elements that shouldn't be in the clone
-                    target.querySelectorAll('.z-40, .z-50, [data-print-hide]').forEach(el => el.remove());
+                    target.querySelectorAll('.center-node-btn, .opacity-0.group-hover\\:opacity-100, .z-40, .z-50, [data-print-hide], svg').forEach(el => el.remove());
                     // Remove group hover scale effects
                     target.querySelectorAll('.group').forEach(el => {
                         el.classList.remove('hover:scale-105', 'hover:-translate-y-0.5');
@@ -590,16 +688,21 @@
                         if (parent && node) {
                             const pp = getOffsetPos(parent);
                             const np = getOffsetPos(node);
+                            
                             const sx = pp.x + pp.width / 2;
                             const sy = pp.y + pp.height;
                             const tx = np.x + np.width / 2;
                             const ty = np.y;
-                            const midY = sy + (ty - sy) * 0.15;
+
                             const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                            
+                            // Traditional Elbow style (50/50 split)
+                            const midY = sy + (ty - sy) * 0.5;
                             path.setAttribute('d', `M${sx},${sy} V${midY} H${tx} V${ty}`);
+
                             path.setAttribute('fill', 'none');
-                            path.setAttribute('stroke', '#6b7280');
-                            path.setAttribute('stroke-width', '2');
+                            path.setAttribute('stroke', '#4b5563'); 
+                            path.setAttribute('stroke-width', '1.2');
                             path.setAttribute('stroke-linecap', 'round');
                             path.setAttribute('stroke-linejoin', 'round');
                             svg.appendChild(path);
@@ -683,155 +786,357 @@
 
                 async exportPNG() {
                     this.printExporting = true;
+                    let tempDiv = null;
                     try {
-                        const el = document.getElementById('print-canvas-area');
-                        if (!el) return;
-
-                        // Get accurate dimensions of the full tree content natively
+                        const sheetEl = document.getElementById('print-paper-sheet');
                         const treeEl = document.getElementById('print-preview-tree');
-                        // Use scrollWidth/scrollHeight because the nodes use nested flexboxes, negating absolute offset bounds
-                        const treeWidth = treeEl.scrollWidth || window.innerWidth;
-                        const treeHeight = treeEl.scrollHeight || window.innerHeight;
+                        if (!sheetEl || !treeEl) return;
 
-                        // Determine exact export dimensions with padding (600w, 600h)
-                        const exportWidth = Math.max(treeWidth + 600, window.innerWidth);
-                        const exportHeight = Math.max(treeHeight + 600, window.innerHeight);
+                        console.group('Export PNG Debug');
 
-                        // Save user's current preview viewport
-                        const oldPanX = this.printPanX;
-                        const oldPanY = this.printPanY;
-                        const oldScale = this.printScale;
+                        // 1. Calculate dimensions
+                        let baseW, baseH;
+                        const PADDING = 100;
+                        const TITLE_H = 150;
 
-                        // Temporarily snap the tree to center-top of the export canvas at 1:1 scale
-                        this.printScale = 1;
-                        this.printPanX = (exportWidth - treeWidth) / 2;
-                        this.printPanY = 250; // 250px top padding for title
+                        if (this.selectedPaperSize === 'auto') {
+                            const savedScale = this.printScale;
+                            this.printScale = 1;
+                            await new Promise(resolve => setTimeout(resolve, 50));
+                            baseW = treeEl.scrollWidth + PADDING * 2;
+                            baseH = treeEl.scrollHeight + PADDING * 2 + TITLE_H;
+                            this.printScale = savedScale;
+                        } else {
+                            const size = this.PAPER_SIZES[this.selectedPaperSize];
+                            if (this.paperOrientation === 'landscape') {
+                                baseW = this.mmToPx(size.h);
+                                baseH = this.mmToPx(size.w);
+                            } else {
+                                baseW = this.mmToPx(size.w);
+                                baseH = this.mmToPx(size.h);
+                            }
+                        }
 
-                        // Give Alpine/DOM time to render the new transform safely before capturing
-                        await new Promise(resolve => setTimeout(resolve, 300));
+                        console.log('1. Dimensions calculated:', { baseW, baseH, PADDING, TITLE_H });
 
-                        // Capture with explicitly calculated dimensions
-                        const dataUrl = await modernScreenshot.domToPng(el, {
-                            width: exportWidth,
-                            height: exportHeight,
-                            scale: 2, // 2 is high enough for crisp borders without exhausting memory
-                            backgroundColor: '#ffffff',
-                            style: { 
-                                width: exportWidth + 'px', 
-                                height: exportHeight + 'px', 
-                                overflow: 'visible',
-                                transform: 'none',
-                                transformOrigin: 'top left'
+                        // 2. Clone and Prepare
+                        const sourceNodeCount = sheetEl.querySelectorAll('.node-card').length;
+                        console.log('2a. Pre-clone Diagnostic - Nodes in original:', sourceNodeCount);
+
+                        tempDiv = document.createElement('div');
+                        tempDiv.style.cssText = `position:fixed;top:0;left:0;width:${baseW}px;height:${baseH}px;overflow:visible;background:#f5f0e8;z-index:-9999;opacity:0;pointer-events:none;`;
+
+                        const sheetClone = sheetEl.cloneNode(true);
+                        sheetClone.setAttribute('x-ignore', '');
+                        sheetClone.style.cssText = `position:relative;width:${baseW}px !important;height:${baseH}px !important;overflow:visible !important;background:#f5f0e8;transform:none !important;transition:none !important;display:block !important;visibility:visible !important;opacity:1 !important;`;
+
+                        sheetClone.querySelectorAll('[x-show],[x-cloak],[x-if]').forEach(el => {
+                            el.removeAttribute('x-show'); el.removeAttribute('x-cloak'); el.removeAttribute('x-if');
+                            el.style.display = '';
+                        });
+
+                        sheetClone.querySelectorAll('*').forEach(el => {
+                            el.style.opacity = '1';
+                            el.style.visibility = 'visible';
+                            el.style.transform = 'none';
+                            el.style.transition = 'none';
+                            el.style.animation = 'none';
+                            if (el.tagName === 'svg') {
+                                el.style.display = 'block';
+                                el.style.overflow = 'visible';
                             }
                         });
 
-                        // Restore user's viewport
-                        this.printScale = oldScale;
-                        this.printPanX = oldPanX;
-                        this.printPanY = oldPanY;
+                        const clonedTree = sheetClone.querySelector('[id="print-preview-tree"]');
+                        if (clonedTree) {
+                            const treeRealWidth = treeEl.scrollWidth;
+                            const treeRealHeight = treeEl.scrollHeight;
+                            const availableW = baseW - (PADDING * 2);
+                            const availableH = baseH - (PADDING * 2 + TITLE_H);
+                            let fitScale = 1;
+                            if (this.selectedPaperSize !== 'auto') {
+                                fitScale = Math.min(1, availableW / treeRealWidth, availableH / treeRealHeight);
+                            }
 
-                        // Convert data URL to Blob for reliable downloading with exact filename
-                        const res = await fetch(dataUrl);
-                        const blob = await res.blob();
-                        const objectUrl = URL.createObjectURL(blob);
+                            clonedTree.removeAttribute(':style');
+                            clonedTree.style.cssText = `position:absolute;top:${TITLE_H + PADDING}px;left:0;width:${treeRealWidth}px;height:${treeRealHeight}px;transform-origin:top left;opacity:1 !important;visibility:visible !important;display:block !important;overflow:visible !important;`;
+                            clonedTree.style.transform = `scale(${fitScale})`;
+                            const scaledWidth = treeRealWidth * fitScale;
+                            const leftOffset = Math.max(PADDING, (baseW - scaledWidth) / 2);
+                            clonedTree.style.left = leftOffset + 'px';
+                        }
 
-                        const filename = 'gia-pha-' + new Date().toISOString().slice(0,10) + '.png';
+                        const clonedTitle = sheetClone.querySelector('.print-title-container');
+                        if (clonedTitle) {
+                            clonedTitle.style.cssText = `position:absolute;top:${this.getTitleTopMargin()}px;left:0;right:0;width:100% !important;display:flex !important;justify-content:center !important;transform:none !important;`;
+                            const frame = clonedTitle.querySelector('.print-title-frame');
+                            if (frame) {
+                                frame.style.cssText = 'background:transparent;border:none;box-shadow:none;backdrop-filter:none;padding:0;';
+                                const textSpan = frame.querySelector('span');
+                                if (textSpan) {
+                                    const sizeMap = { 'a4': '30px', 'a3': '45px', 'a2': '65px', 'a1': '90px', 'a0': '125px' };
+                                    textSpan.style.fontSize = sizeMap[this.selectedPaperSize] || '30px';
+                                }
+                            }
+                        }
+
+                        tempDiv.appendChild(sheetClone);
+                        document.body.appendChild(tempDiv);
+
+                        // 3. IMAGE EMBEDDING
+                        console.log('4d. Embedding images...');
+                        const bgEls = sheetClone.querySelectorAll('[style*="background-image"]');
+                        for (const el of bgEls) {
+                            const bg = el.style.backgroundImage;
+                            const match = bg.match(/url\(['"]?([^'"]+)['"]?\)/);
+                            if (match && match[1] && !match[1].startsWith('data:')) {
+                                const base64 = await this.imageToBase64(match[1]);
+                                el.style.backgroundImage = `url("${base64}")`;
+                            }
+                        }
+
+                        void tempDiv.offsetHeight;
+
+                        const firstNodeInClone = sheetClone.querySelector('.node-card');
+                        if (firstNodeInClone) {
+                            const rect = firstNodeInClone.getBoundingClientRect();
+                            console.log('4c. Geometry Diagnostic:', rect.width, 'x', rect.height, 'at', rect.top, ',', rect.left);
+                        }
+
+                        const CANVAS_LIMIT = 14500;
+                        let captureScale = parseInt(this.exportQuality);
+                        if (baseW * captureScale > CANVAS_LIMIT) {
+                            captureScale = Math.floor(CANVAS_LIMIT / baseW * 10) / 10;
+                        }
+                        console.log('5. Capture scale:', captureScale);
+
+                        await document.fonts.ready;
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+
+                        console.log('7. Calling domToPng...');
+                        const dataUrl = await modernScreenshot.domToPng(sheetClone, {
+                            width: baseW,
+                            height: baseH,
+                            scale: captureScale,
+                            backgroundColor: '#f5f0e8',
+                            style: { width: baseW + 'px', height: baseH + 'px', visibility: 'visible', opacity: '1' }
+                        });
+
+                        if (!dataUrl || dataUrl.length < 2000) throw new Error('Ảnh chụp bị rỗng.');
+
                         const link = document.createElement('a');
-                        link.download = filename;
-                        link.href = objectUrl;
-                        document.body.appendChild(link);
+                        link.download = `gia-pha-${this.selectedPaperSize}-${new Date().toISOString().slice(0,10)}.png`;
+                        link.href = dataUrl;
                         link.click();
-                        document.body.removeChild(link);
-                        
-                        // Cleanup
-                        setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+                        console.groupEnd();
                     } catch (err) {
                         console.error('Export PNG failed:', err);
+                        console.groupEnd();
                         alert('Lỗi xuất ảnh: ' + err.message);
                     } finally {
+                        if (tempDiv && tempDiv.parentNode) tempDiv.parentNode.removeChild(tempDiv);
                         this.printExporting = false;
                     }
                 },
 
+
                 async exportPDF() {
                     this.printExporting = true;
+                    let tempDiv = null;
                     try {
-                        const el = document.getElementById('print-canvas-area');
-                        if (!el) return;
-
-                        // Get accurate dimensions of the full tree content natively
+                        const sheetEl = document.getElementById('print-paper-sheet');
                         const treeEl = document.getElementById('print-preview-tree');
-                        // Use scrollWidth/scrollHeight because the nodes use nested flexboxes, negating absolute offset bounds
-                        const treeWidth = treeEl.scrollWidth || window.innerWidth;
-                        const treeHeight = treeEl.scrollHeight || window.innerHeight;
+                        if (!sheetEl || !treeEl) return;
 
-                        // Determine exact export dimensions with padding
-                        const exportWidth = Math.max(treeWidth + 600, window.innerWidth);
-                        const exportHeight = Math.max(treeHeight + 600, window.innerHeight);
+                        console.group('Export PDF Debug');
+ 
+                        // 1. Calculate dimensions
+                        let baseW, baseH, mmW, mmH;
+                        const PADDING = 100;
+                        const TITLE_H = 150;
+ 
+                        if (this.selectedPaperSize === 'auto') {
+                            const savedScale = this.printScale;
+                            this.printScale = 1;
+                            await new Promise(resolve => setTimeout(resolve, 50));
+                            baseW = treeEl.scrollWidth + PADDING * 2;
+                            baseH = treeEl.scrollHeight + PADDING * 2 + TITLE_H;
+                            this.printScale = savedScale;
+                            mmW = baseW * 25.4 / 96;
+                            mmH = baseH * 25.4 / 96;
+                        } else {
+                            const size = this.PAPER_SIZES[this.selectedPaperSize];
+                            if (this.paperOrientation === 'landscape') {
+                                mmW = size.h; mmH = size.w;
+                            } else {
+                                mmW = size.w; mmH = size.h;
+                            }
+                            baseW = this.mmToPx(mmW);
+                            baseH = this.mmToPx(mmH);
+                        }
+ 
+                        console.log('1. Dimensions calculated:', { baseW, baseH, mmW, mmH, PADDING, TITLE_H });
+ 
+                        // 2. Clone for capture
+                        console.log('2. Cloning sheetEl...', sheetEl);
+                        const sourceNodeCount = sheetEl.querySelectorAll('.node-card').length;
+                        console.log('2a. Pre-clone Diagnostic - Nodes in original sheetEl:', sourceNodeCount);
 
-                        // Save user's current preview viewport
-                        const oldPanX = this.printPanX;
-                        const oldPanY = this.printPanY;
-                        const oldScale = this.printScale;
+                        tempDiv = document.createElement('div');
+                        // Use fixed position with opacity 0
+                        tempDiv.style.cssText = `position:fixed;top:0;left:0;width:${baseW}px;height:${baseH}px;overflow:visible;background:#f5f0e8;z-index:-9999;opacity:0;pointer-events:none;`;
+ 
+                        const sheetClone = sheetEl.cloneNode(true);
+                        sheetClone.setAttribute('x-ignore', '');
+                        sheetClone.style.cssText = `position:relative;width:${baseW}px !important;height:${baseH}px !important;min-height:${baseH}px;overflow:visible !important;background:#f5f0e8;transform:none !important;transition:none !important;display:block !important;visibility:visible !important;opacity:1 !important;`;
+ 
+                        console.log('3. Stripping Alpine and forcing visibility...');
+                        sheetClone.querySelectorAll('[x-show],[x-cloak],[x-if]').forEach(el => {
+                            el.removeAttribute('x-show'); el.removeAttribute('x-cloak'); el.removeAttribute('x-if'); 
+                            el.style.display = '';
+                        });
+                        
+                        // GLOBAL RESET: Flatten everything
+                        sheetClone.querySelectorAll('*').forEach(el => {
+                            el.style.opacity = '1';
+                            el.style.visibility = 'visible';
+                            el.style.transform = 'none';
+                            el.style.transition = 'none';
+                            el.style.animation = 'none';
+                            if (el.tagName === 'svg') {
+                                el.style.display = 'block';
+                                el.style.overflow = 'visible';
+                            }
+                        });
+ 
+                        const nodeCount = sheetClone.querySelectorAll('.node-card').length;
+                        console.log('3b. Diagnostic - Node count in clone:', nodeCount);
+                        if (nodeCount === 0 && sourceNodeCount > 0) {
+                            console.error('CLONE FAILURE: Original had nodes, clone does not!');
+                        }
 
-                        // Temporarily snap the tree to center-top of the export canvas at 1:1 scale
-                        this.printScale = 1;
-                        this.printPanX = (exportWidth - treeWidth) / 2;
-                        this.printPanY = 250;
+                        const clonedTree = sheetClone.querySelector('[id="print-preview-tree"]');
+                        if (clonedTree) {
+                            console.log('4. Positioning and Scaling cloned tree...');
+                            const treeRealWidth = treeEl.scrollWidth;
+                            const treeRealHeight = treeEl.scrollHeight;
+                            
+                            // CALCULATE SMART FIT SCALE
+                            const availableW = baseW - (PADDING * 2);
+                            const availableH = baseH - (PADDING * 2 + TITLE_H);
+                            let fitScale = 1;
+                            if (this.selectedPaperSize !== 'auto') {
+                                fitScale = Math.min(1, availableW / treeRealWidth, availableH / treeRealHeight);
+                                console.log('4a. Smart Fit Scale:', fitScale);
+                            }
 
-                        // Give Alpine/DOM time to render the new transform safely before capturing
-                        await new Promise(resolve => setTimeout(resolve, 300));
+                            clonedTree.removeAttribute(':style');
+                            clonedTree.style.cssText = `position:absolute;top:${TITLE_H + PADDING}px;left:0;width:${treeRealWidth}px;height:${treeRealHeight}px;transform-origin:top left;opacity:1 !important;visibility:visible !important;display:block !important;overflow:visible !important;`;
+                            clonedTree.style.transform = `scale(${fitScale})`;
+                            const scaledWidth = treeRealWidth * fitScale;
+                            const leftOffset = Math.max(PADDING, (baseW - scaledWidth) / 2);
+                            clonedTree.style.left = leftOffset + 'px';
+                        }
 
-                        // Capture as JPEG for PDF to reduce size, high scale for quality
-                        const dataUrl = await modernScreenshot.domToJpeg(el, {
-                            width: exportWidth,
-                            height: exportHeight,
-                            scale: 2,
-                            backgroundColor: '#ffffff',
+                        // Position Title
+                        const clonedTitle = sheetClone.querySelector('.print-title-container');
+                        if (clonedTitle) {
+                            clonedTitle.style.cssText = `position:absolute;top:${this.getTitleTopMargin()}px;left:0;right:0;width:100% !important;display:flex !important;justify-content:center !important;transform:none !important;`;
+                            const frame = clonedTitle.querySelector('.print-title-frame');
+                            if (frame) {
+                                frame.style.cssText = 'background:transparent;border:none;box-shadow:none;backdrop-filter:none;padding:0;';
+                                frame.querySelectorAll('.print-title-icon').forEach(icon => icon.remove());
+                                const textSpan = frame.querySelector('span');
+                                if (textSpan) {
+                                    const sizeMap = { 'a4': '30px', 'a3': '45px', 'a2': '65px', 'a1': '90px', 'a0': '125px' };
+                                    textSpan.style.fontSize = sizeMap[this.selectedPaperSize] || '30px';
+                                }
+                            }
+                        }
+
+                        tempDiv.appendChild(sheetClone);
+                        document.body.appendChild(tempDiv);
+                        
+                        // BASE64 IMAGE EMBEDDING
+                        console.log('4d. Embedding images for PDF...');
+                        const bgEls = sheetClone.querySelectorAll('[style*="background-image"]');
+                        for (const el of bgEls) {
+                            const bg = el.style.backgroundImage;
+                            const match = bg.match(/url\(['"]?([^'"]+)['"]?\)/);
+                            if (match && match[1] && !match[1].startsWith('data:')) {
+                                const base64 = await this.imageToBase64(match[1]);
+                                el.style.backgroundImage = `url("${base64}")`;
+                            }
+                        }
+
+                        // Force Reflow
+                        void tempDiv.offsetHeight;
+
+                        // Diagnostic - Check first node visibility
+                        const firstNodeInClone = sheetClone.querySelector('.node-card');
+                        if (firstNodeInClone) {
+                            const rect = firstNodeInClone.getBoundingClientRect();
+                            console.log('4c. Geometry Diagnostic - First node in clone:', rect.width, 'x', rect.height, 'at', rect.top, ',', rect.left);
+                        }
+ 
+                        // 3. Smart Resizer: Handle browser canvas limits
+                        const CANVAS_LIMIT = 14500;
+                        let captureScale = parseInt(this.exportQuality);
+                        if (baseW * captureScale > CANVAS_LIMIT) {
+                            captureScale = Math.floor(CANVAS_LIMIT / baseW * 10) / 10;
+                        }
+                        if (baseH * captureScale > CANVAS_LIMIT) {
+                            captureScale = Math.min(captureScale, Math.floor(CANVAS_LIMIT / baseH * 10) / 10);
+                        }
+                        console.log('5. Calculated scale:', captureScale);
+
+                        console.log('6. Waiting for fonts and stability (2000ms)...');
+                        await document.fonts.ready;
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+ 
+                        // 4. Capture with validated scale
+                        console.log('7. Calling domToJpeg...');
+                        const dataUrl = await modernScreenshot.domToJpeg(sheetClone, {
+                            width: baseW,
+                            height: baseH,
+                            scale: captureScale,
                             quality: 0.95,
+                            backgroundColor: '#f5f0e8',
                             style: { 
-                                width: exportWidth + 'px', 
-                                height: exportHeight + 'px', 
-                                overflow: 'visible',
-                                transform: 'none',
-                                transformOrigin: 'top left'
+                                width: baseW + 'px', 
+                                height: baseH + 'px',
+                                visibility: 'visible',
+                                opacity: '1'
                             }
                         });
 
-                        // Restore user's viewport
-                        this.printScale = oldScale;
-                        this.printPanX = oldPanX;
-                        this.printPanY = oldPanY;
-
+                        console.log('8. Capture complete. DataUrl length:', dataUrl ? dataUrl.length : 'NULL');
+                        if (!dataUrl || dataUrl.length < 2000) {
+                            console.error('DataUrl snippet:', dataUrl ? dataUrl.substring(0, 100) : 'N/A');
+                            throw new Error('Ảnh chụp bị rỗng. Vui lòng thử lại hoặc giảm độ nét.');
+                        }
+ 
+                        // 5. PDF Layout
+                        console.log('9. Generating PDF...');
                         const { jsPDF } = window.jspdf;
-                        
-                        // Use exact dimensions from the element export width/height
-                        const orientation = exportWidth > exportHeight ? 'l' : 'p';
-                        
-                        // Dimensions in pixels mapping to canvas
-                        const pdf = new jsPDF(orientation, 'px', [exportWidth, exportHeight]);
-                        pdf.addImage(dataUrl, 'JPEG', 0, 0, exportWidth, exportHeight);
-                        
-                        // Output PDF as Blob for reliable downloading with exact filename
-                        const pdfBlob = pdf.output('blob');
-                        const pdfObjectUrl = URL.createObjectURL(pdfBlob);
-                        
-                        const pdfFilename = 'gia-pha-' + new Date().toISOString().slice(0,10) + '.pdf';
-                        const pdfLink = document.createElement('a');
-                        pdfLink.download = pdfFilename;
-                        pdfLink.href = pdfObjectUrl;
-                        document.body.appendChild(pdfLink);
-                        pdfLink.click();
-                        document.body.removeChild(pdfLink);
-                        
-                        // Cleanup
-                        setTimeout(() => URL.revokeObjectURL(pdfObjectUrl), 10000);
+                        const orientation = mmW > mmH ? 'l' : 'p';
+                        const pdf = new jsPDF(orientation, 'mm', [mmW, mmH]);
+                        pdf.addImage(dataUrl, 'JPEG', 0, 0, mmW, mmH);
+                        pdf.save(`gia-pha-${this.selectedPaperSize}-${new Date().toISOString().slice(0,10)}.pdf`);
+                        console.log('10. PDF Download triggered.');
+                        console.groupEnd();
                     } catch (err) {
                         console.error('Export PDF failed:', err);
+                        console.groupEnd();
                         alert('Lỗi xuất PDF: ' + err.message);
                     } finally {
+                        if (tempDiv && tempDiv.parentNode) tempDiv.parentNode.removeChild(tempDiv);
                         this.printExporting = false;
                     }
+                },
+
+                closePrintPreview() {
+                    this.printPreviewActive = false;
                 }
             }));
         });
@@ -956,7 +1261,7 @@
                             <path fill-rule="evenodd" d="M5 4v3H4a2 2 0 00-2 2v3a2 2 0 002 2h1v2a2 2 0 002 2h6a2 2 0 002-2v-2h1a2 2 0 002-2V9a2 2 0 00-2-2h-1V4a2 2 0 00-2-2H7a2 2 0 00-2 2zm8 0H7v3h6V4zm0 8H7v4h6v-4z" clip-rule="evenodd" />
                         </svg>
                     </button>
-                    <button @click="scale *= 1.02" class="p-2 hover:bg-gray-100 rounded text-gray-600"
+                    <button @click="scale *= 1.05" class="p-2 hover:bg-gray-100 rounded text-gray-600"
                         title="Zoom In">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
                             fill="currentColor">
@@ -970,7 +1275,7 @@
                         title="Reset">
                         <span class="text-xs font-bold" x-text="Math.round(scale * 100) + '%'"></span>
                     </button>
-                    <button @click="scale /= 1.02" class="p-2 hover:bg-gray-100 rounded text-gray-600"
+                    <button @click="scale /= 1.05" class="p-2 hover:bg-gray-100 rounded text-gray-600"
                         title="Zoom Out">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
                             fill="currentColor">
@@ -1045,13 +1350,18 @@
 
             {{-- TOP TOOLBAR --}}
             <div class="flex-shrink-0 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-lg px-4 py-2 flex items-center justify-between gap-2 z-10">
-                {{-- Left: Title --}}
-                <div class="flex items-center gap-2 flex-shrink-0">
-                    <span class="text-xl">🖨️</span>
-                    <div>
-                        <h2 class="text-sm font-bold text-gray-800 font-serif">In Gia Phả</h2>
-                        <p class="text-[10px] text-gray-500 hidden xl:block">Kéo khối sang trái/phải để căn chỉnh</p>
-                    </div>
+                {{-- Left: Tab Selection --}}
+                <div class="flex items-center bg-gray-100 p-1 rounded-xl">
+                    <button @click="printTab = 'tree'" 
+                            class="px-4 py-1.5 rounded-lg text-sm font-bold transition-all"
+                            :class="printTab === 'tree' ? 'bg-white shadow-sm text-[#C41E3A]' : 'text-gray-500 hover:text-gray-700'">
+                        Cây Gia Phả
+                    </button>
+                    <button @click="printTab = 'calendar'" 
+                            class="px-4 py-1.5 rounded-lg text-sm font-bold transition-all"
+                            :class="printTab === 'calendar' ? 'bg-white shadow-sm text-[#C41E3A]' : 'text-gray-500 hover:text-gray-700'">
+                        Lịch Sự Kiện
+                    </button>
                 </div>
 
                 {{-- Center: Actions --}}
@@ -1072,8 +1382,43 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
-                        <span>Reset vị trí</span>
+                        <span>Reset</span>
                     </button>
+
+                    <div class="w-px h-8 bg-gray-300 mx-1"></div>
+
+                    {{-- Paper Size Selection --}}
+                    <div class="flex items-center gap-2">
+                        <select x-model="selectedPaperSize" class="bg-gray-100 border-none text-xs font-bold rounded-lg px-2 py-2 focus:ring-0 cursor-pointer">
+                            <template x-for="(info, key) in PAPER_SIZES" :key="key">
+                                <option :value="key" x-text="info.name"></option>
+                            </template>
+                        </select>
+                        
+                        <button @click="paperOrientation = (paperOrientation === 'landscape' ? 'portrait' : 'landscape')"
+                                class="p-2 hover:bg-gray-100 rounded-lg text-gray-600 transition-colors"
+                                :class="selectedPaperSize === 'auto' ? 'opacity-30 pointer-events-none' : ''"
+                                :title="paperOrientation === 'landscape' ? 'Xoay dọc' : 'Xoay ngang'">
+                            <svg x-show="paperOrientation === 'landscape'" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                            </svg>
+                            <svg x-show="paperOrientation === 'portrait'" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 4v16M12 4v16M18 4v16" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="w-px h-8 bg-gray-300 mx-1"></div>
+
+                    {{-- Quality Selector --}}
+                    <div class="flex items-center gap-1">
+                        <span class="text-[10px] font-bold text-gray-400">Độ nét:</span>
+                        <select x-model="exportQuality" class="bg-gray-100 border-none text-xs font-bold rounded-lg px-2 py-2 focus:ring-0 cursor-pointer">
+                            <option value="1">Thường</option>
+                            <option value="2">Nét (HD)</option>
+                            <option value="3">Siêu Nét (4K)</option>
+                        </select>
+                    </div>
 
                     <div class="w-px h-8 bg-gray-300 mx-1"></div>
 
@@ -1124,36 +1469,76 @@
             </div>
 
             {{-- PREVIEW CANVAS AREA --}}
-            <div id="print-canvas-area" class="flex-1 overflow-hidden relative cursor-grab active:cursor-grabbing bg-white"
+            <div id="print-canvas-area" class="flex-1 overflow-hidden relative cursor-grab active:cursor-grabbing bg-[#333] flex items-center justify-center"
+                 x-init="setTimeout(() => updateSheetPreview(), 500)"
+                 x-effect="selectedPaperSize; paperOrientation; updateSheetPreview()"
                  @mousedown="printStartPan($event)"
                  @wheel.prevent="printZoom($event)">
 
-                {{-- Background: same dragon scroll as original --}}
-                <div class="absolute inset-0 pointer-events-none"
-                     style="background-image: url(/images/bg-dragon-scroll.jpg); background-size: cover; background-position: center; opacity: 0.5;"></div>
+                {{-- The Visual Paper Frame --}}
+                <div id="print-paper-sheet" 
+                     class="shadow-2xl relative bg-white transition-all duration-300 overflow-hidden shrink-0"
+                     :style="selectedPaperSize === 'auto' 
+                        ? `width: 100%; height: 100%; transform: none;` 
+                        : `width: ${sheetW}px; height: ${sheetH}px; transform: scale(${sheetScale}); transform-origin: center;`
+                     ">
 
-                {{-- Title Header: same as original but static (no marquee) --}}
-                <div class="absolute top-4 left-1/2 -translate-x-1/2 z-40 pointer-events-none select-none flex flex-col items-center">
-                    <div class="bg-white/90 backdrop-blur-md shadow-sm border border-primary-200/50 px-6 py-2 rounded-full flex items-center gap-2">
-                        <span class="text-lg opacity-80">📜</span>
-                        <div class="overflow-hidden w-64 md:w-96">
-                            <span class="font-serif text-base md:text-lg text-[#C41E3A] font-bold uppercase tracking-widest whitespace-nowrap">
-                                {{ $filters['treeTitle'] ?? 'Gia phả dòng họ Nguyễn' }}
-                            </span>
+                    {{-- Background: same dragon scroll as original --}}
+                    <div class="absolute inset-0 pointer-events-none"
+                         style="background-image: url(/images/bg-dragon-scroll.jpg); background-size: cover; background-position: center; opacity: 0.5;"></div>
+
+                    {{-- Title Header: fixed position on the SHEET --}}
+                    <div class="print-title-container absolute left-0 right-0 z-40 px-10 pointer-events-none select-none flex justify-center"
+                         :style="`top: ${getTitleTopMargin()}px`">
+                        <div class="print-title-frame flex items-center justify-center transition-all duration-300">
+                            <div class="max-w-[90%]">
+                                <span class="font-serif font-bold uppercase tracking-[0.2em] whitespace-nowrap block text-center text-[#C41E3A]"
+                                      :class="getTitleFontSize()">
+                                    {{ $filters['treeTitle'] ?? 'Gia phả dòng họ Nguyễn' }}
+                                </span>
+                            </div>
                         </div>
-                        <span class="text-lg transform scale-x-[-1] opacity-80">📜</span>
                     </div>
-                </div>
 
-                {{-- Tree Content (Cloned) --}}
-                <div id="print-preview-tree"
-                     class="absolute origin-top-left will-change-transform"
-                     :style="`transform: translate(${printPanX}px, ${printPanY}px) scale(${printScale});`"
-                     @mousedown="if (printDragEnabled) {
-                        const nodeEl = $event.target.closest('[id^=node-]');
-                        if (nodeEl) { printStartDrag($event, nodeEl); }
-                     }">
-                    {{-- Content cloned via JS --}}
+                    {{-- Tree Content (Cloned) --}}
+                    <div id="print-preview-tree" x-show="printTab === 'tree'"
+                         class="absolute origin-top-left will-change-transform"
+                         :style="`transform: translate(${printPanX}px, ${printPanY}px) scale(${printScale});`"
+                         @mousedown="if (printDragEnabled) {
+                            const nodeEl = $event.target.closest('[id^=node-]');
+                            if (nodeEl) { printStartDrag($event, nodeEl); }
+                         }">
+                        {{-- Content cloned via JS --}}
+                    </div>
+
+                    {{-- Calendar Content --}}
+                    <div x-show="printTab === 'calendar'" class="absolute inset-0 pt-32 px-16 overflow-auto">
+                        <div class="max-w-4xl mx-auto space-y-8">
+                            <h2 class="text-3xl font-serif font-bold text-[#C41E3A] border-b-2 border-[#C41E3A]/20 pb-4 text-center">
+                                DANH SÁCH NGÀY QUAN TRỌNG
+                            </h2>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                @forelse(\App\Models\ImportantDate::orderBy('lunar_month')->orderBy('lunar_day')->get() as $date)
+                                    <div class="bg-white/50 border border-gray-200 p-6 rounded-2xl flex flex-col gap-2">
+                                        <div class="flex justify-between items-start">
+                                            <h3 class="font-bold text-xl text-gray-800">{{ $date->title }}</h3>
+                                            <span class="text-xs font-serif text-[#C41E3A] uppercase tracking-wider">
+                                                {{ $date->calendar === 'lunar' ? 'Âm lịch' : 'Dương lịch' }}
+                                            </span>
+                                        </div>
+                                        <div class="flex flex-col gap-1 text-gray-600">
+                                            <p class="text-lg">Ngày: <span class="font-bold text-indigo-600">{{ $date->lunar_day }}/{{ $date->lunar_month }}</span></p>
+                                            <p class="text-sm italic opacity-75">Hàng năm vào ngày {{ $date->lunar_day }} tháng {{ $date->lunar_month }} ({{ $date->calendar === 'lunar' ? 'Âm lịch' : 'Dương lịch' }})</p>
+                                        </div>
+                                    </div>
+                                @empty
+                                    <div class="col-span-2 text-center py-20 text-gray-400">
+                                        Chưa có dữ liệu ngày quan trọng.
+                                    </div>
+                                @endforelse
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 

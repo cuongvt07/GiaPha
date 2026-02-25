@@ -112,29 +112,31 @@
              $siblingsCount = \App\Models\Person::where('mother_id', $person->mother_id)->count();
         }
 
-        // CROWDED SIBLINGS (>= 4) OR GENERATION 4+ -> VERTICAL LAYOUT
-        if ($generationLevel >= 4 || $siblingsCount >= 4) {
-             $cardWidth = 'min-w-[4rem]'; // Wider vertical cards
-             $cardPadding = 'px-3 py-3';
-             $avatarSize = 'w-10 h-10'; // Larger vertical avatar
-             $avatarIcon = 'h-5 w-5';
-             $nameSize = 'text-sm font-bold'; // Larger vertical text
-             $yearSize = 'text-xs';
-             $borderWidth = 'border-2';
-             $borderColor = $person->gender === 'male' ? 'border-blue-400' : 'border-pink-400';
-             $shadowClass = 'shadow-md hover:shadow-lg';
-             $bgOverride =
-                 $person->gender === 'male'
-                     ? 'bg-gradient-to-b from-blue-50 to-blue-100'
-                     : 'bg-gradient-to-b from-pink-50 to-pink-100';
-             $topBorderColor = $person->is_alive ? 'border-t-[3px] border-t-green-500' : 'border-t-[3px] border-t-gray-400';
-             $ringClass = '';
-             $decorativeClass = '';
-             
-             $nameClass = ($person->gender === 'male' ? 'font-bold text-blue-900' : 'font-bold text-pink-900') . ' uppercase';
-             $yearClass = 'font-semibold text-gray-700';
-             $layoutHorizontal = false;
-             $layoutVerticalText = true;
+        // COMPACT VERTICAL for Gen 3 onwards to minimize tree width
+        $shouldBeVertical = ($generationLevel >= 3);
+
+        if ($shouldBeVertical) {
+            $cardWidth = 'min-w-[3.5rem]'; // Ultra-compact vertical cards
+            $cardPadding = 'px-3 py-3';
+            $avatarSize = 'w-10 h-10'; 
+            $avatarIcon = 'h-5 w-5';
+            $nameSize = 'text-sm font-bold'; 
+            $yearSize = 'text-xs';
+            $borderWidth = 'border-2';
+            $borderColor = $person->gender === 'male' ? 'border-blue-400' : 'border-pink-400';
+            $shadowClass = 'shadow-md hover:shadow-lg';
+            $bgOverride =
+                $person->gender === 'male'
+                    ? 'bg-gradient-to-b from-blue-50 to-blue-100'
+                    : 'bg-gradient-to-b from-pink-50 to-pink-100';
+            $topBorderColor = $person->is_alive ? 'border-t-[3px] border-t-green-500' : 'border-t-[3px] border-t-gray-400';
+            $ringClass = '';
+            $decorativeClass = '';
+            
+            $nameClass = ($person->gender === 'male' ? 'font-bold text-blue-900' : 'font-bold text-pink-900') . ' uppercase';
+            $yearClass = 'font-semibold text-gray-700';
+            $layoutHorizontal = false;
+            $layoutVerticalText = true;
         } 
         // SPACIOUS (< 4) -> HORIZONTAL LAYOUT (Like Gen 3-5 but slightly smaller)
         else {
@@ -196,7 +198,7 @@
     }
 @endphp
 
-<div class="group relative flex flex-col items-center cursor-pointer transition-all duration-300 hover:scale-105 hover:-translate-y-0.5 z-10 focus:outline-none focus:ring-2 focus:ring-primary-400 rounded-xl"
+<div class="node-card group relative flex flex-col items-center cursor-pointer transition-all duration-300 hover:scale-105 hover:-translate-y-0.5 z-10 focus:outline-none focus:ring-2 focus:ring-primary-400 rounded-xl"
     tabindex="0" @keydown.enter.prevent="Livewire.dispatch('person-selected', { id: {{ $person->id }} })"
     @keydown.space.prevent="Livewire.dispatch('person-selected', { id: {{ $person->id }} })"
     @click="Livewire.dispatch('person-selected', { id: {{ $person->id }} })">

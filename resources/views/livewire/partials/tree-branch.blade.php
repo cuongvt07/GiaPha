@@ -6,11 +6,18 @@
     $nextGeneration = $currentGeneration + 1;
 @endphp
 
-{{-- STANDARD HORIZONTAL TREE LAYOUT --}}
-<div class="flex flex-row justify-center pt-24 relative">
+{{-- DYNAMIC LAYOUT: Vertical if > 4 children starting from Gen 3 --}}
+@php
+    $useVerticalLayout = false; // REVERTED: User requires horizontal alignment for generations
+    $containerClass = 'flex flex-row justify-center pt-16 relative'; // Tightened vertical gap
+@endphp
+
+<div class="{{ $containerClass }}" 
+     data-layout="horizontal"
+     data-parent-node-id="node-{{ $children->first()->father_id ?? $children->first()->mother_id }}">
 
     @foreach ($children as $child)
-        <div class="flex flex-col items-center relative px-2">
+        <div class="{{ $useVerticalLayout ? 'relative py-4' : 'flex flex-col items-center relative px-0.25' }}">
 
             <!-- The Node Itself -->
             <div class="relative z-10 pt-2">
@@ -23,8 +30,10 @@
 
             <!-- Recursion for next level -->
             @if ($child->children->isNotEmpty())
-                {{-- Spacer --}}
-                <div class="h-16 w-full"></div>
+                @if (!$useVerticalLayout)
+                    {{-- Spacer for horizontal --}}
+                    <div class="h-16 w-full"></div>
+                @endif
 
                 @include('livewire.partials.tree-branch', [
                     'children' => $child->children,

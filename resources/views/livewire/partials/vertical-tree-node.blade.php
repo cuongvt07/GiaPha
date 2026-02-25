@@ -76,9 +76,9 @@
                             </span>
 
                             {{-- Generation Badge --}}
-                            @if ($person->generation)
+                            @if ($person->generation_id)
                                 <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">
-                                    🧬 Đời {{ $person->generation }}
+                                    🧬 Đời {{ $person->generation_id }}
                                 </span>
                             @endif
 

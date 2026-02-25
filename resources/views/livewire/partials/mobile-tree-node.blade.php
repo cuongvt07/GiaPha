@@ -1,7 +1,7 @@
 {{-- Mobile Horizontal Tree Node (Recursive) - Matches Desktop Styling --}}
 @php
     // Calculate generation level
-    $generationLevel = $person->generation ?? 1;
+    $generationLevel = $person->generation_id ?? 1;
 
     // GENERATION-BASED STYLING (Match Desktop)
     if ($generationLevel == 1) {
