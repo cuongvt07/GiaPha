@@ -65,8 +65,8 @@
         $yearClass = 'font-bold text-[#FFA000] text-center';
         $layoutHorizontal = true;
     }
-    // Generation 3, 4, 5: Always Horizontal - nendoi.png
-    elseif ($generationLevel >= 3 && $generationLevel <= 5) {
+    // Generation 3: Always Horizontal - nendoi.png
+    elseif ($generationLevel == 3) {
         $cardWidth = 'min-w-[18rem] w-auto max-w-md';
         $cardPadding = 'pt-8 pb-6 px-8';
         $avatarSize = 'w-16 h-16';
@@ -102,7 +102,7 @@
         $yearClass = 'font-bold text-[#A52A2A] text-center';
         $layoutHorizontal = true;
     }
-    // Generation 6+: Conditional Vertical
+    // Generation 4+: Conditional Vertical
     else {
         // Count Siblings
         $siblingsCount = 0;
@@ -112,8 +112,8 @@
              $siblingsCount = \App\Models\Person::where('mother_id', $person->mother_id)->count();
         }
 
-        // CROWDED SIBLINGS (>= 4) OR GENERATION 7+ -> VERTICAL LAYOUT
-        if ($generationLevel >= 7 || $siblingsCount >= 4) {
+        // CROWDED SIBLINGS (>= 4) OR GENERATION 4+ -> VERTICAL LAYOUT
+        if ($generationLevel >= 4 || $siblingsCount >= 4) {
              $cardWidth = 'min-w-[4rem]'; // Wider vertical cards
              $cardPadding = 'px-3 py-3';
              $avatarSize = 'w-10 h-10'; // Larger vertical avatar

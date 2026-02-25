@@ -1,3 +1,14 @@
+<style>
+    /* Hide all overlapping UI when Print Preview is active */
+    body.print-preview-mode [data-print-hide],
+    body.print-preview-mode .z-\[60\] {
+        display: none !important;
+    }
+    /* Also force-hide any z-50 fixed elements (sidebar-right toggle) */
+    body.print-preview-mode .z-50.fixed {
+        visibility: hidden !important;
+    }
+</style>
 <div class="w-full h-full">
 
 <div class="relative w-full h-full">
@@ -383,7 +394,7 @@
                     if (e.ctrlKey || e.metaKey || e.deltaY) {
                         e.preventDefault();
                         const delta = -e.deltaY;
-                        const zoomFactor = 1.1;
+                        const zoomFactor = 1.02; // Change to 2% (1.02)
 
                         const xs = (e.clientX - this.pointX) / this.scale;
                         const ys = (e.clientY - this.pointY) / this.scale;
@@ -465,8 +476,362 @@
                     }, 100);
                 },
 
+                // Print Preview State
+                printPreviewActive: false,
+                printDragEnabled: true,
+                printDragging: false,
+                printDragNodeId: null,
+                printDragStartX: 0,
+                printDragOriginalOffset: 0,
+                printNodeOffsets: {},
+                printExporting: false,
+                printPanning: false,
+                printPanStartX: 0,
+                printPanStartY: 0,
+                printPanX: 0,
+                printPanY: 0,
+                printScale: 0.45,
+
                 exportTree() {
-                    alert('Tính năng xuất ảnh đang được cập nhật.');
+                    this.openPrintPreview();
+                },
+
+                openPrintPreview() {
+                    this.printPreviewActive = true;
+                    this.printNodeOffsets = {};
+                    this.printPanX = 0;
+                    this.printPanY = 0;
+                    this.printScale = 0.45;
+                    document.body.classList.add('print-preview-mode');
+                    document.body.style.overflow = 'hidden';
+
+                    setTimeout(() => {
+                        this.cloneTreeToPreview();
+                    }, 100);
+                },
+
+                closePrintPreview() {
+                    this.printPreviewActive = false;
+                    this.printNodeOffsets = {};
+                    document.body.classList.remove('print-preview-mode');
+                    document.body.style.overflow = '';
+                },
+
+                cloneTreeToPreview() {
+                    const source = document.getElementById('tree-content');
+                    const target = document.getElementById('print-preview-tree');
+                    if (!source || !target) return;
+
+                    // Clone the tree HTML
+                    target.innerHTML = source.innerHTML;
+
+                    // Remove action buttons, hover effects, and unnecessary UI from clones
+                    target.querySelectorAll('.center-node-btn, .opacity-0.group-hover\\:opacity-100').forEach(el => el.remove());
+                    // Remove any absolutely positioned UI elements that shouldn't be in the clone
+                    target.querySelectorAll('.z-40, .z-50, [data-print-hide]').forEach(el => el.remove());
+                    // Remove group hover scale effects
+                    target.querySelectorAll('.group').forEach(el => {
+                        el.classList.remove('hover:scale-105', 'hover:-translate-y-0.5');
+                        el.style.cursor = this.printDragEnabled ? 'grab' : 'default';
+                    });
+
+                    // Draw SVG connections in the preview
+                    setTimeout(() => this.drawPreviewConnections(), 200);
+                },
+
+                drawPreviewConnections() {
+                    const container = document.getElementById('print-preview-tree');
+                    if (!container) return;
+
+                    let svg = document.getElementById('preview-connection-layer');
+                    if (svg) svg.remove();
+
+                    const nodes = container.querySelectorAll('[data-parent-id]');
+                    if (nodes.length === 0) return;
+
+                    const getOffsetPos = (el) => {
+                        let x = 0, y = 0;
+                        let current = el;
+                        while (current && current !== container) {
+                            x += current.offsetLeft;
+                            y += current.offsetTop;
+                            current = current.offsetParent;
+                        }
+                        // Add drag offset
+                        const nodeId = el.id;
+                        if (nodeId && this.printNodeOffsets[nodeId]) {
+                            x += this.printNodeOffsets[nodeId];
+                        }
+                        return { x, y, width: el.offsetWidth, height: el.offsetHeight };
+                    };
+
+                    let maxX = 0, maxY = 0;
+                    container.querySelectorAll('[id^="node-"]').forEach(node => {
+                        const pos = getOffsetPos(node);
+                        maxX = Math.max(maxX, pos.x + pos.width);
+                        maxY = Math.max(maxY, pos.y + pos.height);
+                    });
+
+                    svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    svg.id = 'preview-connection-layer';
+                    svg.style.position = 'absolute';
+                    svg.style.top = '0';
+                    svg.style.left = '0';
+                    svg.style.width = (maxX + 200) + 'px';
+                    svg.style.height = (maxY + 200) + 'px';
+                    svg.style.pointerEvents = 'none';
+                    svg.style.overflow = 'visible';
+                    svg.style.zIndex = '5';
+                    container.insertBefore(svg, container.firstChild);
+
+                    nodes.forEach(node => {
+                        const parentId = node.getAttribute('data-parent-id');
+                        const parent = container.querySelector('#' + parentId);
+                        if (parent && node) {
+                            const pp = getOffsetPos(parent);
+                            const np = getOffsetPos(node);
+                            const sx = pp.x + pp.width / 2;
+                            const sy = pp.y + pp.height;
+                            const tx = np.x + np.width / 2;
+                            const ty = np.y;
+                            const midY = sy + (ty - sy) * 0.15;
+                            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                            path.setAttribute('d', `M${sx},${sy} V${midY} H${tx} V${ty}`);
+                            path.setAttribute('fill', 'none');
+                            path.setAttribute('stroke', '#6b7280');
+                            path.setAttribute('stroke-width', '2');
+                            path.setAttribute('stroke-linecap', 'round');
+                            path.setAttribute('stroke-linejoin', 'round');
+                            svg.appendChild(path);
+                        }
+                    });
+                },
+
+                // Drag logic for print preview nodes (horizontal only)
+                printStartDrag(e, nodeEl) {
+                    if (!this.printDragEnabled) return;
+                    const nodeId = nodeEl.closest('[id^="node-"]')?.id;
+                    if (!nodeId) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.printDragging = true;
+                    this.printDragNodeId = nodeId;
+                    this.printDragStartX = e.clientX;
+                    this.printDragOriginalOffset = this.printNodeOffsets[nodeId] || 0;
+                    nodeEl.closest('[id^="node-"]').style.cursor = 'grabbing';
+                },
+
+                printOnDrag(e) {
+                    if (!this.printDragging || !this.printDragNodeId) return;
+                    e.preventDefault();
+                    const delta = (e.clientX - this.printDragStartX) / this.printScale;
+                    this.printNodeOffsets[this.printDragNodeId] = this.printDragOriginalOffset + delta;
+                    // Apply transform
+                    const el = document.querySelector('#print-preview-tree #' + this.printDragNodeId);
+                    if (el) {
+                        el.style.transform = `translateX(${this.printNodeOffsets[this.printDragNodeId]}px)`;
+                    }
+                    // Redraw connections
+                    this.drawPreviewConnections();
+                },
+
+                printEndDrag(e) {
+                    if (this.printDragging && this.printDragNodeId) {
+                        const el = document.querySelector('#print-preview-tree #' + this.printDragNodeId);
+                        if (el) el.style.cursor = 'grab';
+                    }
+                    this.printDragging = false;
+                    this.printDragNodeId = null;
+                },
+
+                printResetOffsets() {
+                    this.printNodeOffsets = {};
+                    const container = document.getElementById('print-preview-tree');
+                    if (container) {
+                        container.querySelectorAll('[id^="node-"]').forEach(el => {
+                            el.style.transform = '';
+                        });
+                    }
+                    this.drawPreviewConnections();
+                },
+
+                // Pan the print preview canvas
+                printStartPan(e) {
+                    if (this.printDragging) return;
+                    this.printPanning = true;
+                    this.printPanStartX = e.clientX - this.printPanX;
+                    this.printPanStartY = e.clientY - this.printPanY;
+                },
+                printDoPan(e) {
+                    if (this.printDragging) return;
+                    if (!this.printPanning) return;
+                    this.printPanX = e.clientX - this.printPanStartX;
+                    this.printPanY = e.clientY - this.printPanStartY;
+                },
+                printEndPan(e) {
+                    this.printPanning = false;
+                },
+                printZoom(e) {
+                    e.preventDefault();
+                    const delta = -e.deltaY;
+                    if (delta > 0) {
+                        this.printScale = Math.min(this.printScale * 1.02, 3); // 2% zoom step
+                    } else {
+                        this.printScale = Math.max(this.printScale / 1.02, 0.1); // 2% zoom step
+                    }
+                },
+
+                async exportPNG() {
+                    this.printExporting = true;
+                    try {
+                        const el = document.getElementById('print-canvas-area');
+                        if (!el) return;
+
+                        // Get accurate dimensions of the full tree content natively
+                        const treeEl = document.getElementById('print-preview-tree');
+                        // Use scrollWidth/scrollHeight because the nodes use nested flexboxes, negating absolute offset bounds
+                        const treeWidth = treeEl.scrollWidth || window.innerWidth;
+                        const treeHeight = treeEl.scrollHeight || window.innerHeight;
+
+                        // Determine exact export dimensions with padding (600w, 600h)
+                        const exportWidth = Math.max(treeWidth + 600, window.innerWidth);
+                        const exportHeight = Math.max(treeHeight + 600, window.innerHeight);
+
+                        // Save user's current preview viewport
+                        const oldPanX = this.printPanX;
+                        const oldPanY = this.printPanY;
+                        const oldScale = this.printScale;
+
+                        // Temporarily snap the tree to center-top of the export canvas at 1:1 scale
+                        this.printScale = 1;
+                        this.printPanX = (exportWidth - treeWidth) / 2;
+                        this.printPanY = 250; // 250px top padding for title
+
+                        // Give Alpine/DOM time to render the new transform safely before capturing
+                        await new Promise(resolve => setTimeout(resolve, 300));
+
+                        // Capture with explicitly calculated dimensions
+                        const dataUrl = await modernScreenshot.domToPng(el, {
+                            width: exportWidth,
+                            height: exportHeight,
+                            scale: 2, // 2 is high enough for crisp borders without exhausting memory
+                            backgroundColor: '#ffffff',
+                            style: { 
+                                width: exportWidth + 'px', 
+                                height: exportHeight + 'px', 
+                                overflow: 'visible',
+                                transform: 'none',
+                                transformOrigin: 'top left'
+                            }
+                        });
+
+                        // Restore user's viewport
+                        this.printScale = oldScale;
+                        this.printPanX = oldPanX;
+                        this.printPanY = oldPanY;
+
+                        // Convert data URL to Blob for reliable downloading with exact filename
+                        const res = await fetch(dataUrl);
+                        const blob = await res.blob();
+                        const objectUrl = URL.createObjectURL(blob);
+
+                        const filename = 'gia-pha-' + new Date().toISOString().slice(0,10) + '.png';
+                        const link = document.createElement('a');
+                        link.download = filename;
+                        link.href = objectUrl;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        
+                        // Cleanup
+                        setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+                    } catch (err) {
+                        console.error('Export PNG failed:', err);
+                        alert('Lỗi xuất ảnh: ' + err.message);
+                    } finally {
+                        this.printExporting = false;
+                    }
+                },
+
+                async exportPDF() {
+                    this.printExporting = true;
+                    try {
+                        const el = document.getElementById('print-canvas-area');
+                        if (!el) return;
+
+                        // Get accurate dimensions of the full tree content natively
+                        const treeEl = document.getElementById('print-preview-tree');
+                        // Use scrollWidth/scrollHeight because the nodes use nested flexboxes, negating absolute offset bounds
+                        const treeWidth = treeEl.scrollWidth || window.innerWidth;
+                        const treeHeight = treeEl.scrollHeight || window.innerHeight;
+
+                        // Determine exact export dimensions with padding
+                        const exportWidth = Math.max(treeWidth + 600, window.innerWidth);
+                        const exportHeight = Math.max(treeHeight + 600, window.innerHeight);
+
+                        // Save user's current preview viewport
+                        const oldPanX = this.printPanX;
+                        const oldPanY = this.printPanY;
+                        const oldScale = this.printScale;
+
+                        // Temporarily snap the tree to center-top of the export canvas at 1:1 scale
+                        this.printScale = 1;
+                        this.printPanX = (exportWidth - treeWidth) / 2;
+                        this.printPanY = 250;
+
+                        // Give Alpine/DOM time to render the new transform safely before capturing
+                        await new Promise(resolve => setTimeout(resolve, 300));
+
+                        // Capture as JPEG for PDF to reduce size, high scale for quality
+                        const dataUrl = await modernScreenshot.domToJpeg(el, {
+                            width: exportWidth,
+                            height: exportHeight,
+                            scale: 2,
+                            backgroundColor: '#ffffff',
+                            quality: 0.95,
+                            style: { 
+                                width: exportWidth + 'px', 
+                                height: exportHeight + 'px', 
+                                overflow: 'visible',
+                                transform: 'none',
+                                transformOrigin: 'top left'
+                            }
+                        });
+
+                        // Restore user's viewport
+                        this.printScale = oldScale;
+                        this.printPanX = oldPanX;
+                        this.printPanY = oldPanY;
+
+                        const { jsPDF } = window.jspdf;
+                        
+                        // Use exact dimensions from the element export width/height
+                        const orientation = exportWidth > exportHeight ? 'l' : 'p';
+                        
+                        // Dimensions in pixels mapping to canvas
+                        const pdf = new jsPDF(orientation, 'px', [exportWidth, exportHeight]);
+                        pdf.addImage(dataUrl, 'JPEG', 0, 0, exportWidth, exportHeight);
+                        
+                        // Output PDF as Blob for reliable downloading with exact filename
+                        const pdfBlob = pdf.output('blob');
+                        const pdfObjectUrl = URL.createObjectURL(pdfBlob);
+                        
+                        const pdfFilename = 'gia-pha-' + new Date().toISOString().slice(0,10) + '.pdf';
+                        const pdfLink = document.createElement('a');
+                        pdfLink.download = pdfFilename;
+                        pdfLink.href = pdfObjectUrl;
+                        document.body.appendChild(pdfLink);
+                        pdfLink.click();
+                        document.body.removeChild(pdfLink);
+                        
+                        // Cleanup
+                        setTimeout(() => URL.revokeObjectURL(pdfObjectUrl), 10000);
+                    } catch (err) {
+                        console.error('Export PDF failed:', err);
+                        alert('Lỗi xuất PDF: ' + err.message);
+                    } finally {
+                        this.printExporting = false;
+                    }
                 }
             }));
         });
@@ -574,7 +939,7 @@
             @endif
 
             <!-- Floating Controls (Bottom Right) -->
-            <div class="absolute bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-auto">
+            <div class="absolute bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-auto" x-show="!printPreviewActive">
                 <div class="bg-white rounded-lg shadow-lg border border-gray-200 p-1 flex flex-col">
                     {{-- Calendar Button --}}
                     <button wire:click="$dispatch('open-important-dates')" class="relative p-2 hover:bg-gray-100 rounded text-gray-600 border-b border-gray-100" title="Lịch sự kiện">
@@ -585,7 +950,13 @@
                             <span class="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] text-white font-bold animate-shake z-10 border border-white">!</span>
                         @endif
                     </button>
-                    <button @click="scale *= 1.1" class="p-2 hover:bg-gray-100 rounded text-gray-600"
+                    {{-- Print / Export Button --}}
+                    <button @click="openPrintPreview()" class="p-2 hover:bg-red-50 rounded text-[#C41E3A] border-b border-gray-100" title="In Gia Phả">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M5 4v3H4a2 2 0 00-2 2v3a2 2 0 002 2h1v2a2 2 0 002 2h6a2 2 0 002-2v-2h1a2 2 0 002-2V9a2 2 0 00-2-2h-1V4a2 2 0 00-2-2H7a2 2 0 00-2 2zm8 0H7v3h6V4zm0 8H7v4h6v-4z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                    <button @click="scale *= 1.02" class="p-2 hover:bg-gray-100 rounded text-gray-600"
                         title="Zoom In">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
                             fill="currentColor">
@@ -599,7 +970,7 @@
                         title="Reset">
                         <span class="text-xs font-bold" x-text="Math.round(scale * 100) + '%'"></span>
                     </button>
-                    <button @click="scale /= 1.1" class="p-2 hover:bg-gray-100 rounded text-gray-600"
+                    <button @click="scale /= 1.02" class="p-2 hover:bg-gray-100 rounded text-gray-600"
                         title="Zoom Out">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
                             fill="currentColor">
@@ -660,10 +1031,157 @@
                     </div>
                 @endif
         </div>
+
+        {{-- ====== PRINT PREVIEW OVERLAY ====== --}}
+        <div x-show="printPreviewActive" x-cloak
+             class="fixed inset-0 z-[100] bg-[#f5f0e8] flex flex-col"
+             @keydown.escape.window="closePrintPreview()"
+             @mousemove.window="printOnDrag($event); printDoPan($event)"
+             @mouseup.window="printEndDrag($event); printEndPan($event)"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
+
+            {{-- TOP TOOLBAR --}}
+            <div class="flex-shrink-0 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-lg px-4 py-2 flex items-center justify-between gap-2 z-10">
+                {{-- Left: Title --}}
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <span class="text-xl">🖨️</span>
+                    <div>
+                        <h2 class="text-sm font-bold text-gray-800 font-serif">In Gia Phả</h2>
+                        <p class="text-[10px] text-gray-500 hidden xl:block">Kéo khối sang trái/phải để căn chỉnh</p>
+                    </div>
+                </div>
+
+                {{-- Center: Actions --}}
+                <div class="flex items-center gap-2">
+                    {{-- Toggle Drag --}}
+                    <button @click="printDragEnabled = !printDragEnabled"
+                            class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+                            :class="printDragEnabled ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-300' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                        </svg>
+                        <span x-text="printDragEnabled ? 'Kéo: BẬT' : 'Kéo: TẮT'"></span>
+                    </button>
+
+                    {{-- Reset Positions --}}
+                    <button @click="printResetOffsets()"
+                            class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-all">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span>Reset vị trí</span>
+                    </button>
+
+                    <div class="w-px h-8 bg-gray-300 mx-1"></div>
+
+                    {{-- Zoom controls --}}
+                    <button @click="printScale = Math.max(printScale / 1.1, 0.1)" class="p-2 hover:bg-gray-100 rounded-lg text-gray-600" title="Thu nhỏ">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                    <span class="text-xs font-bold text-gray-600 min-w-[3rem] text-center" x-text="Math.round(printScale * 100) + '%'"></span>
+                    <button @click="printScale = Math.min(printScale * 1.1, 3)" class="p-2 hover:bg-gray-100 rounded-lg text-gray-600" title="Phóng to">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+
+                    <div class="w-px h-8 bg-gray-300 mx-1"></div>
+
+                    {{-- Export Buttons --}}
+                    <button @click="exportPNG()"
+                            :disabled="printExporting"
+                            style="background: linear-gradient(to right, #22c55e, #16a34a);"
+                            class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold text-white shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-wait">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span>Xuất PNG</span>
+                    </button>
+
+                    <button @click="exportPDF()"
+                            :disabled="printExporting"
+                            class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold bg-gradient-to-r from-[#C41E3A] to-[#A01830] text-white hover:from-[#A01830] hover:to-[#800020] shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-wait">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                        <span>Xuất PDF</span>
+                    </button>
+                </div>
+
+                {{-- Right: Close --}}
+                <button @click="closePrintPreview()"
+                        class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    <span>Đóng</span>
+                </button>
+            </div>
+
+            {{-- PREVIEW CANVAS AREA --}}
+            <div id="print-canvas-area" class="flex-1 overflow-hidden relative cursor-grab active:cursor-grabbing bg-white"
+                 @mousedown="printStartPan($event)"
+                 @wheel.prevent="printZoom($event)">
+
+                {{-- Background: same dragon scroll as original --}}
+                <div class="absolute inset-0 pointer-events-none"
+                     style="background-image: url(/images/bg-dragon-scroll.jpg); background-size: cover; background-position: center; opacity: 0.5;"></div>
+
+                {{-- Title Header: same as original but static (no marquee) --}}
+                <div class="absolute top-4 left-1/2 -translate-x-1/2 z-40 pointer-events-none select-none flex flex-col items-center">
+                    <div class="bg-white/90 backdrop-blur-md shadow-sm border border-primary-200/50 px-6 py-2 rounded-full flex items-center gap-2">
+                        <span class="text-lg opacity-80">📜</span>
+                        <div class="overflow-hidden w-64 md:w-96">
+                            <span class="font-serif text-base md:text-lg text-[#C41E3A] font-bold uppercase tracking-widest whitespace-nowrap">
+                                {{ $filters['treeTitle'] ?? 'Gia phả dòng họ Nguyễn' }}
+                            </span>
+                        </div>
+                        <span class="text-lg transform scale-x-[-1] opacity-80">📜</span>
+                    </div>
+                </div>
+
+                {{-- Tree Content (Cloned) --}}
+                <div id="print-preview-tree"
+                     class="absolute origin-top-left will-change-transform"
+                     :style="`transform: translate(${printPanX}px, ${printPanY}px) scale(${printScale});`"
+                     @mousedown="if (printDragEnabled) {
+                        const nodeEl = $event.target.closest('[id^=node-]');
+                        if (nodeEl) { printStartDrag($event, nodeEl); }
+                     }">
+                    {{-- Content cloned via JS --}}
+                </div>
+            </div>
+
+            {{-- Export Loading Overlay --}}
+            <div x-show="printExporting" class="absolute inset-0 bg-black/60 flex items-center justify-center z-50">
+                <div class="bg-white rounded-2xl px-8 py-6 shadow-2xl flex flex-col items-center gap-3">
+                    <svg class="animate-spin h-10 w-10 text-[#C41E3A]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <p class="text-lg font-bold text-gray-800">Đang xuất file...</p>
+                    <p class="text-sm text-gray-500">Vui lòng đợi trong giây lát</p>
+                </div>
+            </div>
+
+            {{-- Instructions Hint (bottom) --}}
+            <div class="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs px-4 py-2 rounded-full backdrop-blur-sm pointer-events-none"
+                 x-show="!printExporting"
+                 x-transition>
+                💡 Cuộn chuột để zoom • Kéo nền để di chuyển • Kéo từng khối để căn chỉnh
+            </div>
+        </div>
+        {{-- ====== END PRINT PREVIEW ====== --}}
+
     </div>
 
     <!-- UI Overlay Controls (Sidebars loaded via livewire) -->
-    <div class="absolute inset-0 pointer-events-none flex justify-between z-30">
+    <div class="absolute inset-0 pointer-events-none flex justify-between z-30" data-print-hide>
         <!-- Left Sidebar (Pointer events auto to allow interaction) -->
         <div class="pointer-events-auto h-full">
             <livewire:components.sidebar-left />
@@ -676,7 +1194,9 @@
     </div>
 
     <!-- Right Sidebar is actually absolute positioned in its own component, but let's keep the structure clean -->
-    <livewire:components.sidebar-right />
+    <div data-print-hide>
+        <livewire:components.sidebar-right />
+    </div>
 
     <!-- Global Loading Overlay -->
     <div wire:loading.flex

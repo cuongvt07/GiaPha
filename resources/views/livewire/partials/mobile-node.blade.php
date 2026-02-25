@@ -51,8 +51,8 @@
         $bgOverride = 'bg-no-repeat bg-[length:100%_100%]';
         $customStyle = "background-image: url('" . asset('images/nento1.png') . "'); background-color: #8B0000;";
 
-    } elseif ($generationLevel >= 3 && $generationLevel <= 5) {
-        // Gen 3-5: nendoi.png - Yellow/Pink - Black Text
+    } elseif ($generationLevel == 3) {
+        // Gen 3: nendoi.png - Yellow/Pink - Black Text
         $cardWidth = 'w-64'; 
         $avatarSize = 'w-14 h-14';
         
@@ -77,7 +77,7 @@
         $customStyle = "background-image: url('" . asset('images/nendoi.png') . "'); background-color: {$bgColor};";
 
     } else {
-        // Gen 6+: Check Siblings Check
+        // Gen 4+: Check Siblings Check
         // Mobile might not query deeply, but let's try basic count if relation loaded
         $siblingsCount = 0;
         if ($person->father_id) {
@@ -89,8 +89,8 @@
              $siblingsCount = \App\Models\Person::where('mother_id', $person->mother_id)->count();
         }
         
-        // Force Vertical if Gen 7+ OR Crowded Gen 6
-        if ($generationLevel >= 7 || $siblingsCount >= 4) {
+        // Force Vertical if Gen 4+ OR Crowded
+        if ($generationLevel >= 4 || $siblingsCount >= 4) {
             $useVerticalText = true;
             $cardWidth = 'w-12';
             $avatarSize = 'w-8 h-8';

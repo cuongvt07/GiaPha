@@ -7,7 +7,10 @@
     <title>{{ $title ?? 'Gia Phả Việt' }}</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script type="module">
+        import * as modernScreenshot from 'https://unpkg.com/modern-screenshot?module';
+        window.modernScreenshot = modernScreenshot;
+    </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsPlumb/2.15.6/js/jsplumb.min.js"></script>
     <style>
