@@ -522,16 +522,16 @@
                 },
 
                 getTitleFontSize() {
-                    if (this.selectedPaperSize === 'auto') return 'text-3xl';
+                    if (this.selectedPaperSize === 'auto') return 'text-4xl';
                     
                     const mapping = {
-                        'a4': 'text-3xl',      // ~30px
-                        'a3': 'text-4xl',      // ~36px
-                        'a2': 'text-5xl',      // ~48px
+                        'a4': 'text-4xl',      // ~36px
+                        'a3': 'text-5xl',      // ~48px
+                        'a2': 'text-6xl',      // ~60px
                         'a1': 'text-6xl',      // ~60px
-                        'a0': 'text-8xl'       // ~96px
+                        'a0': 'text-7xl'       // ~72px
                     };
-                    return mapping[this.selectedPaperSize] || 'text-3xl';
+                    return mapping[this.selectedPaperSize] || 'text-4xl';
                 },
 
                 getTitleTopMargin() {
@@ -625,8 +625,10 @@
                     // Clone the tree HTML
                     target.innerHTML = source.innerHTML;
 
-                    // Remove action buttons, hover effects, and unnecessary UI from clones
+                    // Remove action buttons, hover effects, connector dots, and unnecessary UI from clones
                     target.querySelectorAll('.center-node-btn, .opacity-0.group-hover\\:opacity-100, .z-40, .z-50, [data-print-hide], svg').forEach(el => el.remove());
+                    // Remove ALL connector dots (w-2 h-2 circles at top/bottom of nodes)
+                    target.querySelectorAll('.w-2.h-2.rounded-full').forEach(el => el.remove());
                     // Remove group hover scale effects
                     target.querySelectorAll('.group').forEach(el => {
                         el.classList.remove('hover:scale-105', 'hover:-translate-y-0.5');
@@ -702,7 +704,7 @@
 
                             path.setAttribute('fill', 'none');
                             path.setAttribute('stroke', '#4b5563'); 
-                            path.setAttribute('stroke-width', '1.2');
+                            path.setAttribute('stroke-width', '2.5');
                             path.setAttribute('stroke-linecap', 'round');
                             path.setAttribute('stroke-linejoin', 'round');
                             svg.appendChild(path);
@@ -770,9 +772,42 @@
                     if (!this.printPanning) return;
                     this.printPanX = e.clientX - this.printPanStartX;
                     this.printPanY = e.clientY - this.printPanStartY;
+                    this._updateCenterGuide();
                 },
                 printEndPan(e) {
                     this.printPanning = false;
+                    this._hideCenterGuide();
+                },
+
+                _updateCenterGuide() {
+                    const sheet = document.getElementById('print-paper-sheet');
+                    const tree = document.getElementById('print-preview-tree');
+                    if (!sheet || !tree) return;
+
+                    const sheetRect = sheet.getBoundingClientRect();
+                    const treeRect = tree.getBoundingClientRect();
+                    const sheetCenterX = sheetRect.left + sheetRect.width / 2;
+                    const treeCenterX = treeRect.left + treeRect.width / 2;
+                    const diff = Math.abs(sheetCenterX - treeCenterX);
+
+                    let guide = document.getElementById('center-guide-line');
+                    if (diff < 10) {
+                        // Snap and show guide
+                        if (!guide) {
+                            guide = document.createElement('div');
+                            guide.id = 'center-guide-line';
+                            guide.style.cssText = 'position:absolute;top:0;bottom:0;width:2px;background:red;z-index:999;pointer-events:none;opacity:0.7;';
+                            sheet.appendChild(guide);
+                        }
+                        guide.style.left = '50%';
+                        guide.style.display = 'block';
+                    } else if (guide) {
+                        guide.style.display = 'none';
+                    }
+                },
+                _hideCenterGuide() {
+                    const guide = document.getElementById('center-guide-line');
+                    if (guide) guide.style.display = 'none';
                 },
                 printZoom(e) {
                     e.preventDefault();
@@ -786,353 +821,348 @@
 
                 async exportPNG() {
                     this.printExporting = true;
-                    let tempDiv = null;
                     try {
-                        const sheetEl = document.getElementById('print-paper-sheet');
-                        const treeEl = document.getElementById('print-preview-tree');
-                        if (!sheetEl || !treeEl) return;
-
-                        console.group('Export PNG Debug');
-
-                        // 1. Calculate dimensions
-                        let baseW, baseH;
-                        const PADDING = 100;
-                        const TITLE_H = 150;
-
-                        if (this.selectedPaperSize === 'auto') {
-                            const savedScale = this.printScale;
-                            this.printScale = 1;
-                            await new Promise(resolve => setTimeout(resolve, 50));
-                            baseW = treeEl.scrollWidth + PADDING * 2;
-                            baseH = treeEl.scrollHeight + PADDING * 2 + TITLE_H;
-                            this.printScale = savedScale;
-                        } else {
-                            const size = this.PAPER_SIZES[this.selectedPaperSize];
-                            if (this.paperOrientation === 'landscape') {
-                                baseW = this.mmToPx(size.h);
-                                baseH = this.mmToPx(size.w);
-                            } else {
-                                baseW = this.mmToPx(size.w);
-                                baseH = this.mmToPx(size.h);
-                            }
-                        }
-
-                        console.log('1. Dimensions calculated:', { baseW, baseH, PADDING, TITLE_H });
-
-                        // 2. Clone and Prepare
-                        const sourceNodeCount = sheetEl.querySelectorAll('.node-card').length;
-                        console.log('2a. Pre-clone Diagnostic - Nodes in original:', sourceNodeCount);
-
-                        tempDiv = document.createElement('div');
-                        tempDiv.style.cssText = `position:fixed;top:0;left:0;width:${baseW}px;height:${baseH}px;overflow:visible;background:#f5f0e8;z-index:-9999;opacity:0;pointer-events:none;`;
-
-                        const sheetClone = sheetEl.cloneNode(true);
-                        sheetClone.setAttribute('x-ignore', '');
-                        sheetClone.style.cssText = `position:relative;width:${baseW}px !important;height:${baseH}px !important;overflow:visible !important;background:#f5f0e8;transform:none !important;transition:none !important;display:block !important;visibility:visible !important;opacity:1 !important;`;
-
-                        sheetClone.querySelectorAll('[x-show],[x-cloak],[x-if]').forEach(el => {
-                            el.removeAttribute('x-show'); el.removeAttribute('x-cloak'); el.removeAttribute('x-if');
-                            el.style.display = '';
-                        });
-
-                        sheetClone.querySelectorAll('*').forEach(el => {
-                            el.style.opacity = '1';
-                            el.style.visibility = 'visible';
-                            el.style.transform = 'none';
-                            el.style.transition = 'none';
-                            el.style.animation = 'none';
-                            if (el.tagName === 'svg') {
-                                el.style.display = 'block';
-                                el.style.overflow = 'visible';
-                            }
-                        });
-
-                        const clonedTree = sheetClone.querySelector('[id="print-preview-tree"]');
-                        if (clonedTree) {
-                            const treeRealWidth = treeEl.scrollWidth;
-                            const treeRealHeight = treeEl.scrollHeight;
-                            const availableW = baseW - (PADDING * 2);
-                            const availableH = baseH - (PADDING * 2 + TITLE_H);
-                            let fitScale = 1;
-                            if (this.selectedPaperSize !== 'auto') {
-                                fitScale = Math.min(1, availableW / treeRealWidth, availableH / treeRealHeight);
-                            }
-
-                            clonedTree.removeAttribute(':style');
-                            clonedTree.style.cssText = `position:absolute;top:${TITLE_H + PADDING}px;left:0;width:${treeRealWidth}px;height:${treeRealHeight}px;transform-origin:top left;opacity:1 !important;visibility:visible !important;display:block !important;overflow:visible !important;`;
-                            clonedTree.style.transform = `scale(${fitScale})`;
-                            const scaledWidth = treeRealWidth * fitScale;
-                            const leftOffset = Math.max(PADDING, (baseW - scaledWidth) / 2);
-                            clonedTree.style.left = leftOffset + 'px';
-                        }
-
-                        const clonedTitle = sheetClone.querySelector('.print-title-container');
-                        if (clonedTitle) {
-                            clonedTitle.style.cssText = `position:absolute;top:${this.getTitleTopMargin()}px;left:0;right:0;width:100% !important;display:flex !important;justify-content:center !important;transform:none !important;`;
-                            const frame = clonedTitle.querySelector('.print-title-frame');
-                            if (frame) {
-                                frame.style.cssText = 'background:transparent;border:none;box-shadow:none;backdrop-filter:none;padding:0;';
-                                const textSpan = frame.querySelector('span');
-                                if (textSpan) {
-                                    const sizeMap = { 'a4': '30px', 'a3': '45px', 'a2': '65px', 'a1': '90px', 'a0': '125px' };
-                                    textSpan.style.fontSize = sizeMap[this.selectedPaperSize] || '30px';
-                                }
-                            }
-                        }
-
-                        tempDiv.appendChild(sheetClone);
-                        document.body.appendChild(tempDiv);
-
-                        // 3. IMAGE EMBEDDING
-                        console.log('4d. Embedding images...');
-                        const bgEls = sheetClone.querySelectorAll('[style*="background-image"]');
-                        for (const el of bgEls) {
-                            const bg = el.style.backgroundImage;
-                            const match = bg.match(/url\(['"]?([^'"]+)['"]?\)/);
-                            if (match && match[1] && !match[1].startsWith('data:')) {
-                                const base64 = await this.imageToBase64(match[1]);
-                                el.style.backgroundImage = `url("${base64}")`;
-                            }
-                        }
-
-                        void tempDiv.offsetHeight;
-
-                        const firstNodeInClone = sheetClone.querySelector('.node-card');
-                        if (firstNodeInClone) {
-                            const rect = firstNodeInClone.getBoundingClientRect();
-                            console.log('4c. Geometry Diagnostic:', rect.width, 'x', rect.height, 'at', rect.top, ',', rect.left);
-                        }
-
-                        const CANVAS_LIMIT = 14500;
-                        let captureScale = parseInt(this.exportQuality);
-                        if (baseW * captureScale > CANVAS_LIMIT) {
-                            captureScale = Math.floor(CANVAS_LIMIT / baseW * 10) / 10;
-                        }
-                        console.log('5. Capture scale:', captureScale);
-
-                        await document.fonts.ready;
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-
-                        console.log('7. Calling domToPng...');
-                        const dataUrl = await modernScreenshot.domToPng(sheetClone, {
-                            width: baseW,
-                            height: baseH,
-                            scale: captureScale,
-                            backgroundColor: '#f5f0e8',
-                            style: { width: baseW + 'px', height: baseH + 'px', visibility: 'visible', opacity: '1' }
-                        });
-
-                        if (!dataUrl || dataUrl.length < 2000) throw new Error('Ảnh chụp bị rỗng.');
-
-                        const link = document.createElement('a');
-                        link.download = `gia-pha-${this.selectedPaperSize}-${new Date().toISOString().slice(0,10)}.png`;
-                        link.href = dataUrl;
-                        link.click();
-                        console.groupEnd();
+                        await this._exportAsImage('png');
                     } catch (err) {
                         console.error('Export PNG failed:', err);
-                        console.groupEnd();
                         alert('Lỗi xuất ảnh: ' + err.message);
                     } finally {
-                        if (tempDiv && tempDiv.parentNode) tempDiv.parentNode.removeChild(tempDiv);
                         this.printExporting = false;
                     }
                 },
 
-
                 async exportPDF() {
                     this.printExporting = true;
-                    let tempDiv = null;
                     try {
-                        const sheetEl = document.getElementById('print-paper-sheet');
+                        await this._exportAsImage('pdf');
+                    } catch (err) {
+                        console.error('Export PDF failed:', err);
+                        alert('Lỗi xuất PDF: ' + err.message);
+                    } finally {
+                        this.printExporting = false;
+                    }
+                },
+
+                async _exportAsImage(format) {
+                    // === WYSIWYG APPROACH: Clone the entire print-paper-sheet ===
+                    // Export EXACTLY what the user sees in the preview.
+                    // Clone sheet → inline styles → set real paper size → capture.
+
+                    const sheetEl = document.getElementById('print-paper-sheet');
+                    if (!sheetEl) throw new Error('Không tìm thấy tờ giấy.');
+
+                    // 1. Calculate actual paper dimensions (not viewport-scaled)
+                    let paperW, paperH, mmW, mmH;
+                    if (this.selectedPaperSize === 'auto') {
+                        // For auto, calculate from actual tree content + title + padding
                         const treeEl = document.getElementById('print-preview-tree');
-                        if (!sheetEl || !treeEl) return;
-
-                        console.group('Export PDF Debug');
- 
-                        // 1. Calculate dimensions
-                        let baseW, baseH, mmW, mmH;
-                        const PADDING = 100;
-                        const TITLE_H = 150;
- 
-                        if (this.selectedPaperSize === 'auto') {
-                            const savedScale = this.printScale;
-                            this.printScale = 1;
-                            await new Promise(resolve => setTimeout(resolve, 50));
-                            baseW = treeEl.scrollWidth + PADDING * 2;
-                            baseH = treeEl.scrollHeight + PADDING * 2 + TITLE_H;
-                            this.printScale = savedScale;
-                            mmW = baseW * 25.4 / 96;
-                            mmH = baseH * 25.4 / 96;
+                        const PADDING = 80;
+                        const TITLE_H = 120;
+                        if (treeEl) {
+                            const treeW = treeEl.scrollWidth;
+                            const treeH = treeEl.scrollHeight;
+                            paperW = treeW + PADDING * 2;
+                            paperH = treeH + PADDING * 2 + TITLE_H;
                         } else {
-                            const size = this.PAPER_SIZES[this.selectedPaperSize];
-                            if (this.paperOrientation === 'landscape') {
-                                mmW = size.h; mmH = size.w;
-                            } else {
-                                mmW = size.w; mmH = size.h;
-                            }
-                            baseW = this.mmToPx(mmW);
-                            baseH = this.mmToPx(mmH);
+                            paperW = sheetEl.scrollWidth;
+                            paperH = sheetEl.scrollHeight;
                         }
- 
-                        console.log('1. Dimensions calculated:', { baseW, baseH, mmW, mmH, PADDING, TITLE_H });
- 
-                        // 2. Clone for capture
-                        console.log('2. Cloning sheetEl...', sheetEl);
-                        const sourceNodeCount = sheetEl.querySelectorAll('.node-card').length;
-                        console.log('2a. Pre-clone Diagnostic - Nodes in original sheetEl:', sourceNodeCount);
+                        mmW = paperW * 25.4 / 96;
+                        mmH = paperH * 25.4 / 96;
+                    } else {
+                        const size = this.PAPER_SIZES[this.selectedPaperSize];
+                        if (this.paperOrientation === 'landscape') {
+                            mmW = size.h; mmH = size.w;
+                        } else {
+                            mmW = size.w; mmH = size.h;
+                        }
+                        paperW = this.mmToPx(mmW);
+                        paperH = this.mmToPx(mmH);
+                    }
+                    console.log('[EXPORT] Paper size:', paperW, 'x', paperH, 'mm:', mmW, 'x', mmH);
 
-                        tempDiv = document.createElement('div');
-                        // Use fixed position with opacity 0
-                        tempDiv.style.cssText = `position:fixed;top:0;left:0;width:${baseW}px;height:${baseH}px;overflow:visible;background:#f5f0e8;z-index:-9999;opacity:0;pointer-events:none;`;
- 
-                        const sheetClone = sheetEl.cloneNode(true);
-                        sheetClone.setAttribute('x-ignore', '');
-                        sheetClone.style.cssText = `position:relative;width:${baseW}px !important;height:${baseH}px !important;min-height:${baseH}px;overflow:visible !important;background:#f5f0e8;transform:none !important;transition:none !important;display:block !important;visibility:visible !important;opacity:1 !important;`;
- 
-                        console.log('3. Stripping Alpine and forcing visibility...');
-                        sheetClone.querySelectorAll('[x-show],[x-cloak],[x-if]').forEach(el => {
-                            el.removeAttribute('x-show'); el.removeAttribute('x-cloak'); el.removeAttribute('x-if'); 
-                            el.style.display = '';
-                        });
+                    // 2. Clone the ENTIRE sheet
+                    const clone = sheetEl.cloneNode(true);
+
+                    // 3. Inline computed styles from live DOM to clone
+                    const origEls = sheetEl.querySelectorAll('*');
+                    const cloneEls = clone.querySelectorAll('*');
+
+                    const KEY_PROPS = [
+                        'display','position','top','left','right','bottom','width','height',
+                        'min-width','min-height','max-width','max-height',
+                        'padding','padding-top','padding-bottom','padding-left','padding-right',
+                        'margin','margin-top','margin-bottom','margin-left','margin-right',
+                        'flex-direction','flex-wrap','align-items','justify-content','gap',
+                        'flex-shrink','flex-grow','flex-basis',
+                        'background-color','background-image','background-size','background-position',
+                        'background-repeat',
+                        'color','font-family','font-size','font-weight','font-style',
+                        'text-align','text-transform','text-shadow','text-decoration',
+                        'letter-spacing','line-height','white-space','writing-mode','text-orientation',
+                        'border','border-width','border-style','border-color','border-radius',
+                        'border-top-width','border-top-style','border-top-color',
+                        'border-bottom-width','border-bottom-style','border-bottom-color',
+                        'border-left-width','border-left-style','border-left-color',
+                        'border-right-width','border-right-style','border-right-color',
+                        'box-shadow','opacity','z-index','overflow','overflow-x','overflow-y',
+                        'transform','transform-origin',
+                        'background-blend-mode','filter','pointer-events',
+                    ];
+
+                    // Inline styles on clone root (the sheet) 
+                    const sheetCS = getComputedStyle(sheetEl);
+                    clone.style.cssText = `position:relative;width:${paperW}px;height:${paperH}px;overflow:hidden;background:${sheetCS.backgroundColor};`;
+                    clone.removeAttribute(':style');
+
+                    // Inline styles on all children
+                    for (let i = 0; i < origEls.length && i < cloneEls.length; i++) {
+                        const cs = getComputedStyle(origEls[i]);
+                        const cel = cloneEls[i];
+                        let css = '';
+                        for (const p of KEY_PROPS) {
+                            const v = cs.getPropertyValue(p);
+                            if (v && v !== '' && v !== 'none' && v !== 'normal' && v !== '0px' && v !== 'auto') {
+                                css += `${p}:${v};`;
+                            }
+                        }
+                        css += `display:${cs.getPropertyValue('display')};`;
+                        // Preserve position for absolutely positioned elements
+                        if (cs.position === 'absolute' || cs.position === 'fixed') {
+                            css += `position:${cs.position};`;
+                            css += `top:${cs.top};left:${cs.left};`;
+                        }
+                        cel.style.cssText = css;
                         
-                        // GLOBAL RESET: Flatten everything
-                        sheetClone.querySelectorAll('*').forEach(el => {
-                            el.style.opacity = '1';
-                            el.style.visibility = 'visible';
-                            el.style.transform = 'none';
-                            el.style.transition = 'none';
-                            el.style.animation = 'none';
-                            if (el.tagName === 'svg') {
-                                el.style.display = 'block';
-                                el.style.overflow = 'visible';
-                            }
-                        });
- 
-                        const nodeCount = sheetClone.querySelectorAll('.node-card').length;
-                        console.log('3b. Diagnostic - Node count in clone:', nodeCount);
-                        if (nodeCount === 0 && sourceNodeCount > 0) {
-                            console.error('CLONE FAILURE: Original had nodes, clone does not!');
-                        }
+                        // Remove Alpine directives
+                        cel.removeAttribute('x-show');
+                        cel.removeAttribute('x-init');
+                        cel.removeAttribute('x-effect');
+                        cel.removeAttribute(':style');
+                        cel.removeAttribute(':class');
+                        cel.removeAttribute('@click');
+                        cel.removeAttribute('@mousedown');
+                        cel.removeAttribute('@wheel.prevent');
+                    }
 
-                        const clonedTree = sheetClone.querySelector('[id="print-preview-tree"]');
-                        if (clonedTree) {
-                            console.log('4. Positioning and Scaling cloned tree...');
-                            const treeRealWidth = treeEl.scrollWidth;
-                            const treeRealHeight = treeEl.scrollHeight;
-                            
-                            // CALCULATE SMART FIT SCALE
-                            const availableW = baseW - (PADDING * 2);
-                            const availableH = baseH - (PADDING * 2 + TITLE_H);
-                            let fitScale = 1;
-                            if (this.selectedPaperSize !== 'auto') {
-                                fitScale = Math.min(1, availableW / treeRealWidth, availableH / treeRealHeight);
-                                console.log('4a. Smart Fit Scale:', fitScale);
-                            }
-
-                            clonedTree.removeAttribute(':style');
-                            clonedTree.style.cssText = `position:absolute;top:${TITLE_H + PADDING}px;left:0;width:${treeRealWidth}px;height:${treeRealHeight}px;transform-origin:top left;opacity:1 !important;visibility:visible !important;display:block !important;overflow:visible !important;`;
-                            clonedTree.style.transform = `scale(${fitScale})`;
-                            const scaledWidth = treeRealWidth * fitScale;
-                            const leftOffset = Math.max(PADDING, (baseW - scaledWidth) / 2);
-                            clonedTree.style.left = leftOffset + 'px';
-                        }
-
-                        // Position Title
-                        const clonedTitle = sheetClone.querySelector('.print-title-container');
-                        if (clonedTitle) {
-                            clonedTitle.style.cssText = `position:absolute;top:${this.getTitleTopMargin()}px;left:0;right:0;width:100% !important;display:flex !important;justify-content:center !important;transform:none !important;`;
-                            const frame = clonedTitle.querySelector('.print-title-frame');
-                            if (frame) {
-                                frame.style.cssText = 'background:transparent;border:none;box-shadow:none;backdrop-filter:none;padding:0;';
-                                frame.querySelectorAll('.print-title-icon').forEach(icon => icon.remove());
-                                const textSpan = frame.querySelector('span');
-                                if (textSpan) {
-                                    const sizeMap = { 'a4': '30px', 'a3': '45px', 'a2': '65px', 'a1': '90px', 'a0': '125px' };
-                                    textSpan.style.fontSize = sizeMap[this.selectedPaperSize] || '30px';
-                                }
-                            }
-                        }
-
-                        tempDiv.appendChild(sheetClone);
-                        document.body.appendChild(tempDiv);
-                        
-                        // BASE64 IMAGE EMBEDDING
-                        console.log('4d. Embedding images for PDF...');
-                        const bgEls = sheetClone.querySelectorAll('[style*="background-image"]');
-                        for (const el of bgEls) {
-                            const bg = el.style.backgroundImage;
+                    // 4. Embed all background images as base64
+                    const allCloneEls = clone.querySelectorAll('*');
+                    for (const el of [clone, ...allCloneEls]) {
+                        const bg = el.style.backgroundImage;
+                        if (bg && bg.includes('url(') && !bg.includes('data:')) {
                             const match = bg.match(/url\(['"]?([^'"]+)['"]?\)/);
-                            if (match && match[1] && !match[1].startsWith('data:')) {
-                                const base64 = await this.imageToBase64(match[1]);
-                                el.style.backgroundImage = `url("${base64}")`;
+                            if (match && match[1]) {
+                                try {
+                                    const base64 = await this.imageToBase64(match[1]);
+                                    el.style.backgroundImage = `url("${base64}")`;
+                                } catch(e) { /* skip */ }
                             }
                         }
+                    }
 
-                        // Force Reflow
-                        void tempDiv.offsetHeight;
+                    // 4b. Ensure background fills full paper (zoomed to hide red borders)
+                    const bgChild = clone.querySelector('div[style*="background-image"]');
+                    if (bgChild) {
+                        bgChild.style.position = 'absolute';
+                        bgChild.style.top = '0';
+                        bgChild.style.left = '0';
+                        bgChild.style.width = '100%';
+                        bgChild.style.height = '100%';
+                        bgChild.style.backgroundSize = '115% 115%'; // zoom to crop red borders
+                        bgChild.style.backgroundPosition = 'center center';
+                        bgChild.style.opacity = '0.5';
+                    }
 
-                        // Diagnostic - Check first node visibility
-                        const firstNodeInClone = sheetClone.querySelector('.node-card');
-                        if (firstNodeInClone) {
-                            const rect = firstNodeInClone.getBoundingClientRect();
-                            console.log('4c. Geometry Diagnostic - First node in clone:', rect.width, 'x', rect.height, 'at', rect.top, ',', rect.left);
-                        }
- 
-                        // 3. Smart Resizer: Handle browser canvas limits
-                        const CANVAS_LIMIT = 14500;
-                        let captureScale = parseInt(this.exportQuality);
-                        if (baseW * captureScale > CANVAS_LIMIT) {
-                            captureScale = Math.floor(CANVAS_LIMIT / baseW * 10) / 10;
-                        }
-                        if (baseH * captureScale > CANVAS_LIMIT) {
-                            captureScale = Math.min(captureScale, Math.floor(CANVAS_LIMIT / baseH * 10) / 10);
-                        }
-                        console.log('5. Calculated scale:', captureScale);
+                    // 4c. Ensure title is centered at top
+                    const titleClone = clone.querySelector('.print-title-container');
+                    if (titleClone) {
+                        titleClone.style.position = 'absolute';
+                        titleClone.style.top = '20px';
+                        titleClone.style.left = '0';
+                        titleClone.style.right = '0';
+                        titleClone.style.width = '100%';
+                        titleClone.style.display = 'flex';
+                        titleClone.style.justifyContent = 'center';
+                        titleClone.style.zIndex = '40';
+                        titleClone.style.pointerEvents = 'none';
+                    }
 
-                        console.log('6. Waiting for fonts and stability (2000ms)...');
-                        await document.fonts.ready;
-                        await new Promise(resolve => setTimeout(resolve, 2000));
- 
-                        // 4. Capture with validated scale
-                        console.log('7. Calling domToJpeg...');
-                        const dataUrl = await modernScreenshot.domToJpeg(sheetClone, {
-                            width: baseW,
-                            height: baseH,
-                            scale: captureScale,
-                            quality: 0.95,
-                            backgroundColor: '#f5f0e8',
-                            style: { 
-                                width: baseW + 'px', 
-                                height: baseH + 'px',
-                                visibility: 'visible',
-                                opacity: '1'
-                            }
+                    // 5. Append clone to body (offscreen)
+                    const wrapper = document.createElement('div');
+                    wrapper.style.cssText = `position:fixed;left:-99999px;top:0;width:${paperW}px;height:${paperH}px;overflow:visible;z-index:-1;`;
+                    wrapper.appendChild(clone);
+                    document.body.appendChild(wrapper);
+
+                    await document.fonts.ready;
+                    await new Promise(r => setTimeout(r, 300));
+
+                    // 5b. FIT-TO-PAGE: Recalculate tree transform to fill the paper
+                    const treeInClone = clone.querySelector('#print-preview-tree');
+                    if (treeInClone) {
+                        // Measure tree natural size at scale=1
+                        const origTreeStyle = treeInClone.style.cssText;
+                        treeInClone.style.transform = 'none';
+                        treeInClone.style.position = 'absolute';
+                        treeInClone.style.left = '0';
+                        treeInClone.style.top = '0';
+                        void treeInClone.offsetHeight; // force layout
+                        await new Promise(r => setTimeout(r, 100));
+
+                        // Measure ACTUAL content bounds from all nodes
+                        const allNodes = treeInClone.querySelectorAll('[id^="node-"]');
+                        const treeRect = treeInClone.getBoundingClientRect();
+                        let minX = Infinity, maxX = 0, minY = Infinity, maxY = 0;
+                        allNodes.forEach(n => {
+                            const r = n.getBoundingClientRect();
+                            minX = Math.min(minX, r.left - treeRect.left);
+                            maxX = Math.max(maxX, r.right - treeRect.left);
+                            minY = Math.min(minY, r.top - treeRect.top);
+                            maxY = Math.max(maxY, r.bottom - treeRect.top);
                         });
+                        
+                        const contentW = maxX - minX;
+                        const contentH = maxY - minY;
+                        const contentCenterX = minX + contentW / 2; // center of actual content
+                        const natW = treeInClone.scrollWidth;
+                        const natH = treeInClone.scrollHeight;
 
-                        console.log('8. Capture complete. DataUrl length:', dataUrl ? dataUrl.length : 'NULL');
-                        if (!dataUrl || dataUrl.length < 2000) {
-                            console.error('DataUrl snippet:', dataUrl ? dataUrl.substring(0, 100) : 'N/A');
-                            throw new Error('Ảnh chụp bị rỗng. Vui lòng thử lại hoặc giảm độ nét.');
+                        // Get title height from the clone
+                        const titleContainer = clone.querySelector('.print-title-container');
+                        const titleH = titleContainer ? titleContainer.offsetHeight + 10 : 80;
+                        const MARGIN = 15;
+
+                        // Calculate available space and fit scale
+                        const availW = paperW - MARGIN * 2;
+                        const availH = paperH - titleH - MARGIN;
+                        const fitScale = Math.min(availW / natW, availH / natH, 1.5);
+
+                        // Center based on ACTUAL content center, not tree element center
+                        const scaledContentCenterX = contentCenterX * fitScale;
+                        const offsetX = (paperW / 2) - scaledContentCenterX;
+                        const offsetY = titleH + MARGIN;
+
+                        treeInClone.style.cssText = origTreeStyle;
+                        treeInClone.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${fitScale})`;
+                        treeInClone.style.transformOrigin = 'top left';
+                        treeInClone.style.position = 'absolute';
+                        treeInClone.style.left = '0';
+                        treeInClone.style.top = '0';
+                        treeInClone.style.overflow = 'visible';
+                        
+                        console.log('[EXPORT] Content bounds:', minX.toFixed(0), '-', maxX.toFixed(0), 'x', minY.toFixed(0), '-', maxY.toFixed(0));
+                        console.log('[EXPORT] Fit-to-page: scale', fitScale.toFixed(3), 'offset', offsetX.toFixed(0), offsetY.toFixed(0));
+                    }
+
+                    await new Promise(r => setTimeout(r, 200));
+
+                    // 6. Redraw SVG connections based on clone's actual positions
+                    const treeClone = clone.querySelector('#print-preview-tree');
+                    if (treeClone) {
+                        const oldSvg = treeClone.querySelector('#preview-connection-layer');
+                        if (oldSvg) oldSvg.remove();
+
+                        const cloneNodes = treeClone.querySelectorAll('[data-parent-id]');
+                        if (cloneNodes.length > 0) {
+                            // Get the tree's scale from its transform matrix
+                            const treeTransform = getComputedStyle(treeClone).transform;
+                            let treeScale = 1;
+                            if (treeTransform && treeTransform !== 'none') {
+                                const m = treeTransform.match(/matrix\(([^)]+)\)/);
+                                if (m) { treeScale = parseFloat(m[1].split(',')[0]) || 1; }
+                            }
+                            
+                            const treeR = treeClone.getBoundingClientRect();
+                            const getPos = (el) => {
+                                const r = el.getBoundingClientRect();
+                                // Convert from screen coords back to tree-local coords
+                                return { 
+                                    x: (r.left - treeR.left) / treeScale, 
+                                    y: (r.top - treeR.top) / treeScale, 
+                                    w: r.width / treeScale, 
+                                    h: r.height / treeScale 
+                                };
+                            };
+
+                            let maxX = 0, maxY = 0;
+                            treeClone.querySelectorAll('[id^="node-"]').forEach(n => {
+                                const p = getPos(n);
+                                maxX = Math.max(maxX, p.x + p.w);
+                                maxY = Math.max(maxY, p.y + p.h);
+                            });
+
+                            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                            svg.style.cssText = `position:absolute;top:0;left:0;width:${maxX+200}px;height:${maxY+200}px;pointer-events:none;overflow:visible;z-index:5;`;
+                            treeClone.insertBefore(svg, treeClone.firstChild);
+
+                            cloneNodes.forEach(node => {
+                                const pid = node.getAttribute('data-parent-id');
+                                const par = treeClone.querySelector('#' + pid);
+                                if (par) {
+                                    const pp = getPos(par);
+                                    const np = getPos(node);
+                                    const sx = pp.x + pp.w / 2, sy = pp.y + pp.h;
+                                    const tx = np.x + np.w / 2, ty = np.y;
+                                    const midY = sy + (ty - sy) * 0.5;
+
+                                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                                    path.setAttribute('d', `M${sx},${sy} V${midY} H${tx} V${ty}`);
+                                    path.setAttribute('fill', 'none');
+                                    path.setAttribute('stroke', '#4b5563');
+                                    path.setAttribute('stroke-width', '2.5');
+                                    path.setAttribute('stroke-linecap', 'round');
+                                    path.setAttribute('stroke-linejoin', 'round');
+                                    svg.appendChild(path);
+                                }
+                            });
                         }
- 
-                        // 5. PDF Layout
-                        console.log('9. Generating PDF...');
+                    }
+
+                    // 7. Capture the clone at paper dimensions
+                    const CANVAS_LIMIT = 14500;
+                    let captureScale = parseInt(this.exportQuality) || 1;
+                    if (paperW * captureScale > CANVAS_LIMIT) captureScale = Math.floor(CANVAS_LIMIT / paperW * 10) / 10;
+                    if (paperH * captureScale > CANVAS_LIMIT) captureScale = Math.min(captureScale, Math.floor(CANVAS_LIMIT / paperH * 10) / 10);
+
+                    const dataUrl = await modernScreenshot.domToPng(clone, {
+                        width: paperW,
+                        height: paperH,
+                        scale: captureScale,
+                        backgroundColor: '#f5f0e8',
+                    });
+
+                    // Cleanup
+                    document.body.removeChild(wrapper);
+
+                    if (!dataUrl || dataUrl.length < 1000) {
+                        throw new Error('Chụp ảnh thất bại.');
+                    }
+                    console.log('[EXPORT] Captured OK, length:', dataUrl.length);
+
+                    // 8. Download
+                    if (format === 'pdf') {
                         const { jsPDF } = window.jspdf;
                         const orientation = mmW > mmH ? 'l' : 'p';
                         const pdf = new jsPDF(orientation, 'mm', [mmW, mmH]);
-                        pdf.addImage(dataUrl, 'JPEG', 0, 0, mmW, mmH);
+                        pdf.addImage(dataUrl, 'PNG', 0, 0, mmW, mmH);
                         pdf.save(`gia-pha-${this.selectedPaperSize}-${new Date().toISOString().slice(0,10)}.pdf`);
-                        console.log('10. PDF Download triggered.');
-                        console.groupEnd();
-                    } catch (err) {
-                        console.error('Export PDF failed:', err);
-                        console.groupEnd();
-                        alert('Lỗi xuất PDF: ' + err.message);
-                    } finally {
-                        if (tempDiv && tempDiv.parentNode) tempDiv.parentNode.removeChild(tempDiv);
-                        this.printExporting = false;
+                    } else {
+                        const link = document.createElement('a');
+                        link.download = `gia-pha-${this.selectedPaperSize}-${new Date().toISOString().slice(0,10)}.png`;
+                        link.href = dataUrl;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
                     }
+                },
+
+                _loadImage(src) {
+                    return new Promise((resolve, reject) => {
+                        const img = new Image();
+                        img.crossOrigin = 'anonymous';
+                        img.onload = () => resolve(img);
+                        img.onerror = reject;
+                        img.src = src;
+                    });
                 },
 
                 closePrintPreview() {
@@ -1492,7 +1522,7 @@
                          :style="`top: ${getTitleTopMargin()}px`">
                         <div class="print-title-frame flex items-center justify-center transition-all duration-300">
                             <div class="max-w-[90%]">
-                                <span class="font-serif font-bold uppercase tracking-[0.2em] whitespace-nowrap block text-center text-[#C41E3A]"
+                                <span class="font-serif font-bold uppercase tracking-[0.2em] block text-center text-[#C41E3A]"
                                       :class="getTitleFontSize()">
                                     {{ $filters['treeTitle'] ?? 'Gia phả dòng họ Nguyễn' }}
                                 </span>
